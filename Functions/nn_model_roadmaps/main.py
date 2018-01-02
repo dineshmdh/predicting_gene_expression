@@ -16,9 +16,11 @@ parser.add_argument("gene", help="Gene of interest", type=str)
 parser.add_argument("-hs", "--hidden_size", help="Percent of the input layer size to be used in the hidden layer (Default: 60)", default=60, type=int)
 parser.add_argument("-d", "--distance", help="Distance from TSS (in kb) to cover as region of interest (Default: 150)", type=int, default=150)
 parser.add_argument("-m", "--max_iter", help="Maximum number of interations for neural net optimization (Default: 300)", type=int, default=300)
+
 parser.add_argument("-T", "--tf_corr_threshold_high", help="Upper limit of the correlation threshold to select TFs for this gene. All TFs with expression in correlation with this gene in between this and the tf_corr_threshold_low values are selected for the model (Default: 1.0)", type=float, default=1.0)
 parser.add_argument("-t", "--tf_corr_threshold_low", help="Lower limit of the correlation threshold to select TFs for this gene. All TFs with expression in correlation with this gene in between this and the *_high values are selected for the model (Default: 0.3)", type=float, default=0.3)
 parser.add_argument("-en", "--enforce_corr_thresholding", help="If set, correlation based thresholding is turned on for when random TFs are selected for the target gene. Only applicable for selecting random TFs. (Default: Not set)", action="store_true")
+
 parser.add_argument("-u", "--use_tad_info", help="Use TAD boundaries to demarcate the boundaries for the region of interest (Default: True)", type=bool, default=True)
 parser.add_argument("-f", "--take_top_fts", help="only pertains to DHS sites. If True, only self.take_this_many_top_fts top DHS sites ranked by PCC with self.gene_ofInterest expression profile are selected. If False, all DHS sites are used. If the total number of DHS sites for this gene_ofInterest is less than self.take_this_many_top_fts, then all DHS sites will be used. This helps in limiting the number of parameters to learn and from dying on its own sometimes because of excessive memory consumption. (Default: True)", type=bool, default=True)
 parser.add_argument("-F", "--take_this_many_top_fts", help="Take this many DHS sites that are most correlated (in absolute value) with the expession of the gene (Default: 20)", type=int, default=20)
