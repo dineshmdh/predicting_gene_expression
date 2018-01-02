@@ -1,8 +1,13 @@
 # Created on Jan 1, 2018
 
-import pprint
-import os
-import argparse  # should be after importing os (as os is being used for outputDir)
+import time
+import os  # os is being used to set up default outputDir
+import argparse
+import sys
+
+import logging
+
+from helper_functions import get_output_dir
 
 ############################################################
 # ####### Set up the parser arguments ###### #
@@ -30,5 +35,32 @@ parser.add_argument("-o", "--outputDir", help="Output directory. A directory for
 parser.add_argument("-k", "--run_id", help="Run_id for multiple parallel runs. This is useful in slurm. (Default: -1)", type=int, default=-1)
 
 args = parser.parse_args()
+############################################################
+# ####### End of parser setup ###### #
+############################################################
 
-pprint(args)
+start_time = time.time()
+sys.path = sys.path[1:]
+sys.path.insert(0, os.path.join(os.getcwd(), "helper_scripts"))
+
+############################################################
+# ####### Set up the logger info ###### #
+############################################################
+# create output dir, set the logging handlers (file + stream) and params
+outputDir = get_output_dir(args)  # creates a specific directory in args.outputDir
+formatter = logging.Formatter('%(asctime)s: %(name)-12s: %(levelname)-8s: %(message)s')
+
+file_handler = logging.FileHandler(os.path.join(outputDir, args.gene.upper() + ".log"))
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(formatter)
+
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(logging.INFO)
+stream_handler.setFormatter(formatter)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(file_handler)
+logger.addHandler(stream_handler)
+
+logger.info("Command line arguments: {}".format(args))

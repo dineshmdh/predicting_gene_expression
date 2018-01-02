@@ -20,7 +20,7 @@ from PyPDF2 import PdfFileMerger
 def get_output_dir(args):
     # output files + directory parameters
     assert os.path.exists(args.outputDir)  # outputDir is updated below
-    outputDir = "{0}/{1}_{2}kb_T{3}_t{4}".format(args.outputDir, args.gene.upper(), args.distance, args.tf_corr_threshold_high, args.tf_corr_threshold_low)
+    outputDir = "{0}/{1}_{2}kb_{3}_t{4}".format(args.outputDir, args.gene.upper(), args.distance, args.filter_tfs_by, args.lowerlimit_to_filter_tfs)
     if (args.init_wts_type == "random"):
         outputDir += "_rWts"
     elif (args.init_wts_type == "corr"):
@@ -30,12 +30,10 @@ def get_output_dir(args):
     outputDir += "_m" + str(args.max_iter)
     if (args.use_random_TFs):
         outputDir += "_rTFs"
-        if (args.enforce_corr_thresholding):
-            outputDir += "_en"
     if (args.use_random_DHSs):
         outputDir += "_rDHSs"
-    if (args.slurmrank > 0):  # rank is >=1; if > 0, means running for multiple set of random TFs for the same gene_ofInterest
-        outputDir += "_run" + str(args.slurmrank)
+    if (args.run_id > 0):  # rank is >=1; if > 0, means running for multiple set of random TFs for the same gene_ofInterest
+        outputDir += "_run" + str(args.run_id)
     if (args.to_seed):
         outputDir += "_s"
     if (not os.path.exists(outputDir)):
