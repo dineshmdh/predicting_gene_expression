@@ -5,9 +5,13 @@ import os  # os is being used to set up default outputDir
 import argparse
 import sys
 
-import logging
+start_time = time.time()
+sys.path = sys.path[1:]
+sys.path.insert(0, os.path.join(os.getcwd(), "helper_scripts"))
 
+import logging
 from helper_functions import get_output_dir
+import global_variables_git
 
 ############################################################
 # ####### Set up the parser arguments ###### #
@@ -24,6 +28,7 @@ parser.add_argument("-rd", "--use_random_DHSs", help="If set, a set of --take_th
 # ============= Arguments pertaining to the TFs ===========
 parser.add_argument("-tff", "--filter_tfs_by", help="For the TF-TG association, filter the predicted list of regulatory TFs for the given gene using one of two measures: 1) Pearson Correlation Coefficient between the expression of TF and the target gene TG, or 2) Z-score indicating the significance of one TF-TG association given perturbation measurements of the expression of the TF and the TG across various experimental or biological conditions (see CellNet paper and CLR algorithm). (Default: 'zscores')", choices=["pearson_corr", "zscores"], type=str, default="zscores")
 parser.add_argument("-tfl", "--lowerlimit_to_filter_tfs", help="Lower limit of the measure --filter-tfs-by. The value should be >0 for '--filter-tfs-by pearson_corr' and >= 4.0 for '--filter-tfs-by zscores'. Note that the respective upper limits are 1.0 and infinity respectively, and therefore need not be declared. (Default: 5.0 for the default '--filter-tfs-by zscores'.)", default=5.0, type=float)
+parser.add_argument("-rt", "--use_random_TFs", help="If set, instead of using cell-net predicted TFs that make up the GRN for this gene, same number of random TFs as in the original set are collected for this gene. (Default: False)", action="store_true")
 
 # ============= Arguments pertaining to algorithm ===========
 parser.add_argument("-w", "--init_wts_type", help="Relates to the initial wts set between the nodes. If 'random', random initial wts are set between any two nodes; if 'corr', initial wts between input and hidden nodes are set to the correlation values between the node feature and the expression of the gene, and the initial weights between hidden layers or the hidden layer and output is set to 0.5 (Default: 'corr')", choices=["random", "corr"], type=str, default="corr")
@@ -35,17 +40,11 @@ parser.add_argument("-o", "--outputDir", help="Output directory. A directory for
 parser.add_argument("-k", "--run_id", help="Run_id for multiple parallel runs. This is useful in slurm. (Default: -1)", type=int, default=-1)
 
 args = parser.parse_args()
-############################################################
-# ####### End of parser setup ###### #
-############################################################
-
-start_time = time.time()
-sys.path = sys.path[1:]
-sys.path.insert(0, os.path.join(os.getcwd(), "helper_scripts"))
 
 ############################################################
-# ####### Set up the logger info ###### #
+# ####### End of parser setup; Set up the logger info ###### #
 ############################################################
+
 # create output dir, set the logging handlers (file + stream) and params
 outputDir = get_output_dir(args)  # creates a specific directory in args.outputDir
 formatter = logging.Formatter('%(asctime)s: %(name)-12s: %(levelname)-8s: %(message)s')
@@ -64,3 +63,12 @@ logger.addHandler(file_handler)
 logger.addHandler(stream_handler)
 
 logger.info("Command line arguments: {}".format(args))
+
+############################################################
+# ####### Set up the data for the model ###### #
+############################################################
+
+
+def get_gv_and_model_prep_instances(args, outputDir):
+    gv = Global_Vars(args, outputDir)
+    return gv
