@@ -22,12 +22,13 @@ parser.add_argument("gene", help="Gene of interest", type=str)
 # ============= Arguments pertaining to DHS sites ===========
 parser.add_argument("-d", "--distance", help="Distance from TSS (in kb) to cover as region of interest (Default: 150)", type=int, default=150)
 parser.add_argument("-u", "--use_tad_info", help="Use TAD boundaries to demarcate the boundaries for the region of interest. (Default: True)", type=bool, default=True)
-parser.add_argument("-F", "--take_this_many_top_dhs_fts", help="Take this many DHS sites that are most correlated (in absolute value) with the expession of the gene. If this is set to '-1', then all the known DHS sites in the region TSS +/- --distance is used. (Default: 20)", type=int, default=20)
+parser.add_argument("-dl", "--pcc_lowerlimit_to_filter_dhss", help="Lower limit of the absolute PCC(dhs site and gene expression) to be used in filtering top dhs sites. All DHS sites with pcc above this threshold are ignored. (Default: 0.25)", type=float, default=0.25)
+parser.add_argument("-F", "--take_this_many_top_fts", help="Take this many DHS sites (for dhsOnly model) or TFs (for tfsOnly model). For the DHSs+TFs joint model, top features from both sets are used. If this is set to '-1', then all the known DHS sites in the region TSS +/- --distance or regulatory TFs is used. (Default: 15)", type=int, default=15)
 parser.add_argument("-rd", "--use_random_DHSs", help="If set, a set of --take_this_many_top_dhs_fts number of DHS sites are randomly selected from the genome. (Default: False)", action="store_true")
 
 # ============= Arguments pertaining to the TFs ===========
-parser.add_argument("-tff", "--filter_tfs_by", help="For the TF-TG association, filter the predicted list of regulatory TFs for the given gene using one of two measures: 1) Pearson Correlation Coefficient between the expression of TF and the target gene TG, or 2) Z-score indicating the significance of one TF-TG association given perturbation measurements of the expression of the TF and the TG across various experimental or biological conditions (see CellNet paper and CLR algorithm). (Default: 'zscores')", choices=["pearson_corr", "zscores"], type=str, default="zscores")
-parser.add_argument("-tfl", "--lowerlimit_to_filter_tfs", help="Lower limit of the measure --filter-tfs-by. The value should be >0 for '--filter-tfs-by pearson_corr' and >= 4.0 for '--filter-tfs-by zscores'. Note that the respective upper limits are 1.0 and infinity respectively, and therefore need not be declared. (Default: 5.0 for the default '--filter-tfs-by zscores'.)", default=5.0, type=float)
+parser.add_argument("-tff", "--filter_tfs_by", help="For the TF-TG association, filter the predicted list of regulatory TFs for the given gene using one of two measures: 1) Pearson Correlation Coefficient between the expression of TF and the target gene TG, or 2) Z-score indicating the significance of one TF-TG association given perturbation measurements of the expression of the TF and the TG across various experimental or biological conditions (see CellNet paper and CLR algorithm). (Default: 'zscores')", choices=["pcc", "zscore"], type=str, default="zscore")
+parser.add_argument("-tfl", "--lowerlimit_to_filter_tfs", help="Lower limit of the measure --filter-tfs-by. The value should be >0 for '--filter-tfs-by pcc' and >= 4.0 for '--filter-tfs-by zscores'. Note that the respective upper limits are 1.0 and infinity respectively, and therefore need not be declared. (Default: 5.0 for the default '--filter-tfs-by zscores'.)", default=5.0, type=float)
 parser.add_argument("-rt", "--use_random_TFs", help="If set, instead of using cell-net predicted TFs that make up the GRN for this gene, same number of random TFs as in the original set are collected for this gene. (Default: False)", action="store_true")
 
 # ============= Arguments pertaining to algorithm ===========
@@ -67,6 +68,8 @@ logger.info("Command line arguments: {}".format(args))
 ############################################################
 # ####### Set up the data for the model ###### #
 ############################################################
+
+print(args)
 
 
 def get_gv_and_model_prep_instances(args, outputDir):

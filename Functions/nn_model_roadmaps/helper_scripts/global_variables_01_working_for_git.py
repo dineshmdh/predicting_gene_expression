@@ -2,19 +2,15 @@
 Created on Jan 2, 2018
 
 A class for global variables
-  - will contain all variables + bed and dfs that will be used downstream for training.  - doing
-  - should be able to load enhancers for the gene right in this  - done
+  - will contain all variables + bed and dfs that will be used downstream for training.
+  - should be able to load enhancers for the gene right in this
   - should be able to process cell net TFs and return the dfs right in this / helper function
   - will generate all the plots that i should be able to get when i call gv.plots.<name> etc.
 
 
 To update later:
-1. Generate a df_allgenes_tpm_anno file -- so that I don't merge the two files using
-get_full_tpm_info_df(csv_tpm_merged, csv_gencode_mrnas) static function.
-2. Remove redundancy also in having to find tad index first. make a tall format file
-(so i don't have to go through the for loop searching for the tad file)
-3. check chromosome boundaries in self.get_true_roi_dhs_df() function. Also, make this function independent
-of tad info.
+
+3. check chromosome boundaries in self.get_true_roi_dhs_df() function. Also, make this function independent of tad info.
 4. ModelPreparation.tf_corr_threshold_low variable is not being used at the moment.
 5. Make sure that when choosing the TFs, the PCC used to choose the TFs with high PCC are the absolute PCCs.
 6. Add noise to the correlation while initializing the weights w1 and w2.
@@ -35,9 +31,12 @@ plt.switch_backend('agg')
 import seaborn as sns
 
 import pandas as pd
-from pybedtools import BedTool as bedtools  # default bedtools column names: chrom, start, stop, name, score and strand.
+from pybedtools import BedTool as bedtools
+# default bedtools column names: chrom, start, stop, name, score and strand.
 
-from helper_functions import get_genome_wide_enhancers_df, get_full_tpm_info_df, get_dhss_all_df
+from helper_functions import get_genome_wide_enhancers_df
+from helper_functions import get_full_tpm_info_df
+from helper_functions import get_dhss_all_df
 
 pd.options.mode.chained_assignment = None  # default='warn' (see README.md)
 
@@ -89,51 +88,19 @@ class Global_Vars(object):
         self.use_random_TFs = args.use_random_TFs
         ######################################################
         ###### read and set up the basic data frames ######
-
-        self.csv_gencode_mrnas = os.path.join(self.inputDir, "gencode.v19.annotation.genesOnly.reOrdered.txt")
-        self.csv_tads_selected = os.path.join(self.inputDir, "df_tads_all.csv")
-
+        '''
         self.csv_dhs_normed = os.path.join(self.inputDir, "dnaseseq_df_tpmNormed.txt")
         self.csv_tpm_merged = os.path.join(self.inputDir, "merged_tpms.tsv")
         self.csv_enhancer_tss = os.path.join(self.inputDir, "enhancer_tss_associations.bed")
+        '''
 
-        assert os.path.exists(self.csv_gencode_mrnas)
-        assert os.path.exists(self.csv_tads_selected)
-        assert os.path.exists(self.csv_dhs_normed)
-        assert os.path.exists(self.csv_tpm_merged)
-        assert os.path.exists(self.csv_enhancer_tss)
+        self.csv_dhs_normed = os.path.join(self.inputDir, "roadmap.dnase_imputed.merged_by_samplesAndBedtools.pval.signal")
+        self.csv_tpm_merged = os.path.join(self.inputDir, "roadmap.rnase_imputed.LogRPKM.signal.mergedWTADlocs")
 
-        '''Get genome-wide tpm and dhs signal info, and enhancer info - using helper functions'''
-        df_gencode_all_mrnas = pd.read_csv(self.csv_gencode_mrnas, sep="\t",
-                                           names=["chr_gene", "ss_gene", "es_gene", "strand_gene",
-                                                  "geneSymbol", "gene_id", "anno", "gtf_line"])
-        self.df_gencode_all_mrnas = df_gencode_all_mrnas.drop(["anno", "gtf_line"], axis=1)
-        self.df_allgenes_tpm_anno = get_full_tpm_info_df(self.csv_tpm_merged, self.df_gencode_all_mrnas)
         self.df_all_dhss_normed = get_dhss_all_df(self.csv_dhs_normed, self.logger)
-        self.df_enh_tsss_info = get_genome_wide_enhancers_df(self.csv_enhancer_tss, self.logger)
 
         '''Get info series on this gene - even if self.use_tad_info is False.'''
         self.gene_ofInterest_info = self.df_allgenes_tpm_anno[self.df_allgenes_tpm_anno["geneSymbol"] == self.gene_ofInterest].iloc[0]
-
-        '''Get enhancers for this gene'''
-        self.df_enh_thisgene_info = self.df_enh_tsss_info[self.df_enh_tsss_info["gene"] == self.gene_ofInterest]
-
-        if (self.df_enh_thisgene_info.shape[0] == 0):
-            self.logger.info("{} has no predicted enhancer.".format(self.gene_ofInterest))
-
-        '''Get dfs + info specific to this TAD'''
-        self.tad_index = None
-        self.genes_in_this_tad = None
-        self.df_tpms_anno_this_tad = None
-        self.df_dhss_this_tad = None
-
-        if (self.use_tad_info):
-            self.tad_index, self.genes_in_this_tad, self.df_tads_selected = self.get_tad_index_for_this_gene()
-            # self.genes_in_this_tad here is a list of ensemble ids for the genes in this TAD
-            self.df_tpms_anno_this_tad = self.df_allgenes_tpm_anno[self.df_allgenes_tpm_anno["gene_id"].isin(self.genes_in_this_tad)]
-            self.plot_tpm_matrix_for_this_tad()
-            self.df_this_tad, self.df_dhss_this_tad = self.get_dhs_df_for_this_tad()
-            self.plot_dhs_matrix_for_this_tad()
 
         if not (self.use_random_DHSs):
             self.df_dhss_in_roi = self.get_true_roi_dhs_df()  # checks for self.use_tad_info; roi == region of interest
@@ -144,78 +111,8 @@ class Global_Vars(object):
 
     def __repr__(self):
         out_info = "\nGeneral Info: " + self.gene_ofInterest
-        if (self.use_tad_info):
-            out_info += "\nTAD index: " + str(self.tad_index)
-        else:
-            out_info += "\nTAD info not used."
         out_info += "\nTotal number of genes in this TAD: " + str(len(self.genes_in_this_tad))
         return out_info
-
-    def get_out_suffix(self):
-        '''Get suffix for all output files to be saved.'''
-        out_suffix = ""
-        if (self.use_random_wts):
-            out_suffix += "_wRndmWts"
-        elif (self.use_corr_wts):
-            out_suffix += "_wCorrWts"
-        else:
-            out_suffix += "_wExpDecayWts"
-
-        if (self.take_top_fts):
-            out_suffix += "_on" + str(self.take_this_many_top_fts) + "DHSs"
-
-        out_suffix += "_T" + str(self.tf_corr_threshold_high)
-        out_suffix += "_t" + str(self.tf_corr_threshold_low)
-        out_suffix += "_at" + str(self.dist_lim) + "kb" + ["_tpmLogged" if self.take_log2_tpm else ""][0]
-        return out_suffix
-
-    def get_tad_index_for_this_gene(self):
-        '''Return tad_index for the gene_ofInterest in the file:
-        self.csv_tads_selected. Also return the ensemble gene name
-        for this gene_ofInterest.
-        '''
-        st = time.time()
-        df_tads_selected = pd.read_csv(self.csv_tads_selected, sep=",", header=0)
-        # has fields: chrom_tad start_tad stop_tad numGenes genes (genes has the Ensemble Names in a list)
-
-        # get the gene_ensemble_name
-        gene_ens_name = self.df_gencode_all_mrnas[self.df_gencode_all_mrnas["geneSymbol"] == self.gene_ofInterest.upper()]["gene_id"]
-        gene_ens_name = re.split("\s+", gene_ens_name.to_string())[1]
-
-        # Now search for the tad index'''
-        for i in range(0, df_tads_selected.shape[0]):
-            genes_in_this_tad = re.split("', '", df_tads_selected.iloc[i]["genes"][2:-2])
-            if gene_ens_name in genes_in_this_tad:
-                tad_index_selected = df_tads_selected.index[i]
-                break
-        else:
-            raise Exception("TAD index not found for this gene..")
-        self.logger.debug("Time taken for get_tad_index_for_this_gene(): {}".format(time.time() - st))
-        return tad_index_selected, genes_in_this_tad, df_tads_selected
-
-    def get_dhs_df_for_this_tad(self):
-        '''Get df_dhss with dnase signal across samples for self.tad_index.
-        This function generates bedtools object and does intersect; these steps take some time.'''
-        st = time.time()
-
-        bed_alldhss_normed = bedtools.from_dataframe(self.df_all_dhss_normed)
-        self.logger.debug("    Time taken for getting bed_alldhss_normed: {}".format(time.time() - st))
-
-        # Similarly, get the bed object for this tad
-        series_this_tad = self.df_tads_selected.iloc[self.tad_index]
-        df_this_tad = series_this_tad.to_frame().transpose()
-        bed_this_tad = bedtools.from_dataframe(df_this_tad)
-        self.logger.debug("    Time taken for getting bed_this_tad (from start of function): {}".format(time.time() - st))
-
-        # Intersect
-        bed_thistad_dhss = bed_this_tad.intersect(bed_alldhss_normed, wb=True)
-        self.logger.debug("    Time taken for intersecting (from start of function):".format(time.time() - st))
-
-        # convert this bed to df, and remove the tad domain specific columns
-        df_thistad_dhss = pd.read_table(bed_thistad_dhss.fn,
-                                        names=df_this_tad.columns.tolist() + self.df_all_dhss_normed.columns.tolist()).iloc[:, 5:]
-        self.logger.debug("Time taken for get_dhs_df_for_this_tad(): {}".format(time.time() - st))
-        return df_this_tad, df_thistad_dhss
 
     def get_true_roi_dhs_df(self):
         '''Fix the region of interest for DHSs for this gene'''
@@ -247,36 +144,11 @@ class Global_Vars(object):
         if (not self.use_tad_info):
             raise Exception("update this function to get roi..")
 
-        # pdb.set_trace()
-
         rand_ints = sorted(random.sample(range(0, self.df_all_dhss_normed.shape[0]), self.take_this_many_top_fts))
         df_dhss_in_roi = self.df_all_dhss_normed.loc[rand_ints, :]
 
-        # pdb.set_trace()
-
         df_dhss_in_roi.sort_values(by=["chr_dhs", "ss_dhs"], axis=0, ascending=True, inplace=True)
         return df_dhss_in_roi
-
-    def plot_tpm_matrix_for_this_tad(self):
-        '''Plot gene_symbols by cell lines heatmap.'''
-
-        df = self.df_tpms_anno_this_tad[["geneSymbol"] + self.df_tpms_anno_this_tad.columns.tolist()[7:]]
-        df.set_index(["geneSymbol"], inplace=True)
-
-        if (df.shape[0] < 30):
-            sns.set(font_scale=1.5)
-            plt.figure(figsize=(14, 6))
-        else:
-            sns.set(font_scale=1.3)
-            plt.figure(figsize=(14, 14))
-
-        sns.heatmap(df, vmax=5, square=False, xticklabels=False, cbar_kws={"label": "TPM"})
-        plt.yticks(rotation=0)
-        plt.tight_layout()
-        plt.xlabel("Cell lines")
-        plt.ylabel("Gene Symbols")
-        plt.savefig(self.outputDir + "/" + self.gene_ofInterest + "_tad_tpm_matrix.png")
-        plt.close()
 
     def plot_dhs_matrix_for_this_tad(self):
         '''To Plot the dhss_matrix for this tad'''
