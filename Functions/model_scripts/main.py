@@ -10,8 +10,8 @@ sys.path = sys.path[1:]
 sys.path.insert(0, os.path.join(os.getcwd(), "helper_scripts"))
 
 import logging
-from helper_functions import get_output_dir
-import global_variables_git
+from global_variables_final_for_git import Global_Vars
+from prep_for_model_for_git import Model_preparation
 
 ############################################################
 # ####### Set up the parser arguments ###### #
@@ -46,6 +46,29 @@ args = parser.parse_args()
 # ####### End of parser setup; Set up the logger info ###### #
 ############################################################
 
+def get_output_dir(args):
+    # output files + directory parameters
+    assert os.path.exists(args.outputDir)  # outputDir is updated below
+    outputDir = "{0}/{1}_{2}kb_{3}_t{4}".format(args.outputDir, args.gene.upper(), args.distance, args.filter_tfs_by, args.lowerlimit_to_filter_tfs)
+    if (args.init_wts_type == "random"):
+        outputDir += "_rWts"
+    elif (args.init_wts_type == "corr"):
+        outputDir += "_cWts"
+    else:
+        raise Exception()
+    outputDir += "_m" + str(args.max_iter)
+    if (args.use_random_TFs):
+        outputDir += "_rTFs"
+    if (args.use_random_DHSs):
+        outputDir += "_rDHSs"
+    if (args.run_id > 0):  # rank is >=1; if > 0, means running for multiple set of random TFs for the same gene_ofInterest
+        outputDir += "_run" + str(args.run_id)
+    if (args.to_seed):
+        outputDir += "_s"
+    if (not os.path.exists(outputDir)):
+        os.makedirs(outputDir)
+    return outputDir
+
 # create output dir, set the logging handlers (file + stream) and params
 outputDir = get_output_dir(args)  # creates a specific directory in args.outputDir
 formatter = logging.Formatter('%(asctime)s: %(name)-12s: %(levelname)-8s: %(message)s')
@@ -69,9 +92,7 @@ logger.info("Command line arguments: {}".format(args))
 # ####### Set up the data for the model ###### #
 ############################################################
 
-print(args)
-
-
-def get_gv_and_model_prep_instances(args, outputDir):
-    gv = Global_Vars(args, outputDir)
-    return gv
+args = Args()
+gv = Global_Vars(args)
+mp = Model_preparation(gv)
+# mp.tensorflow_model() .. (currently working)
