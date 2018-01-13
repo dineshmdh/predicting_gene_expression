@@ -1,4 +1,3 @@
-import pdb
 import re
 import os
 import random
@@ -29,12 +28,12 @@ class Global_Vars(object):
     4. get random df_tfs for this gene.
     '''
 
-    def __init__(self, args):
+    def __init__(self, args, new_out_dir):
         ######################################################
         ###### set the logging handlers and params ######
         formatter = logging.Formatter('%(asctime)s: %(name)-12s: %(levelname)-8s: %(message)s')
 
-        file_handler = logging.FileHandler(os.path.join(args.outputDir, args.gene.upper() + '.log'))
+        file_handler = logging.FileHandler(os.path.join(new_out_dir, args.gene.upper() + '.log'))
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
 
@@ -60,15 +59,15 @@ class Global_Vars(object):
         self.lowerlimit_to_filter_tfs = args.lowerlimit_to_filter_tfs
         self.take_this_many_top_fts = args.take_this_many_top_fts  # all dhss/tfs will already be filtered by pcc(or zscore)
         self.init_wts_type = args.init_wts_type
-        self.inputDir = "/Users/Dinesh/Dropbox/Github/predicting_gex_with_nn_git/Input_files"
-        self.outputDir = args.outputDir  # generated using  get_output_dir from helper_functions
+        self.inputDir = os.path.abspath("../../Input_files")
+        self.outputDir = new_out_dir
         self.use_random_DHSs = args.use_random_DHSs
         self.use_random_TFs = args.use_random_TFs
         ######################################################
         ###### read and set up the basic data frames ######
         # self.csv_enhancer_tss = os.path.join(self.inputDir, "enhancer_tss_associations.bed")
 
-        self.csv_dhss = os.path.join(self.inputDir, "roadmap.dnase_imputed.merged_by_samplesAndBedtools.pval.signal.txt")
+        self.csv_dhss = os.path.join(self.inputDir, "roadmap.dnase_imputed.merged_by_samplesAndBedTools.pval.signal.txt")
         self.csv_rnase = os.path.join(self.inputDir, "roadmap.rnase_imputed.LogRPKM.signal.mergedWTADlocs.txt")
         self.csv_cn = os.path.join(self.inputDir, "Human_Big_GRN_032014.csv")
 

@@ -5,6 +5,9 @@ import os  # os is being used to set up default outputDir
 import argparse
 import sys
 
+import hyperopt
+from hyperopt import fmin
+
 start_time = time.time()
 sys.path = sys.path[1:]
 sys.path.insert(0, os.path.join(os.getcwd(), "helper_scripts"))
@@ -12,6 +15,9 @@ sys.path.insert(0, os.path.join(os.getcwd(), "helper_scripts"))
 import logging
 from global_variables_final_for_git import Global_Vars
 from prep_for_model_for_git import Model_preparation
+from tensorflow_model_for_git import Tensorflow_model
+import HPO_helper
+from HPO_helper import uniform_int, loguniform_int, tpe_method, get_parameter_space_forHPO
 
 ############################################################
 # ####### Set up the parser arguments ###### #
@@ -20,24 +26,25 @@ parser = argparse.ArgumentParser(description="Using Neural Net, model the expres
 parser.add_argument("gene", help="Gene of interest", type=str)
 
 # ============= Arguments pertaining to DHS sites ===========
-parser.add_argument("-d", "--distance", help="Distance from TSS (in kb) to cover as region of interest (Default: 150)", type=int, default=150)
+parser.add_argument("-d", "--distance", help="Distance from TSS (in kb) to cover as region of interest (Default: 200)", type=int, default=200)
 parser.add_argument("-u", "--use_tad_info", help="Use TAD boundaries to demarcate the boundaries for the region of interest. (Default: True)", type=bool, default=True)
-parser.add_argument("-dl", "--pcc_lowerlimit_to_filter_dhss", help="Lower limit of the absolute PCC(dhs site and gene expression) to be used in filtering top dhs sites. All DHS sites with pcc above this threshold are ignored. (Default: 0.25)", type=float, default=0.25)
+parser.add_argument("-dl", "--pcc_lowerlimit_to_filter_dhss", help="Lower limit of the absolute PCC(dhs site and gene expression) to be used in filtering top dhs sites. All DHS sites with pcc above this threshold are ignored. (Default: 0.2)", type=float, default=0.2)
 parser.add_argument("-F", "--take_this_many_top_fts", help="Take this many DHS sites (for dhsOnly model) or TFs (for tfsOnly model). For the DHSs+TFs joint model, top features from both sets are used. If this is set to '-1', then all the known DHS sites in the region TSS +/- --distance or regulatory TFs is used. (Default: 15)", type=int, default=15)
 parser.add_argument("-rd", "--use_random_DHSs", help="If set, a set of --take_this_many_top_dhs_fts number of DHS sites are randomly selected from the genome. (Default: False)", action="store_true")
 
 # ============= Arguments pertaining to the TFs ===========
 parser.add_argument("-tff", "--filter_tfs_by", help="For the TF-TG association, filter the predicted list of regulatory TFs for the given gene using one of two measures: 1) Pearson Correlation Coefficient between the expression of TF and the target gene TG, or 2) Z-score indicating the significance of one TF-TG association given perturbation measurements of the expression of the TF and the TG across various experimental or biological conditions (see CellNet paper and CLR algorithm). (Default: 'zscores')", choices=["pcc", "zscore"], type=str, default="zscore")
-parser.add_argument("-tfl", "--lowerlimit_to_filter_tfs", help="Lower limit of the measure --filter-tfs-by. The value should be >0 for '--filter-tfs-by pcc' and >= 4.0 for '--filter-tfs-by zscores'. Note that the respective upper limits are 1.0 and infinity respectively, and therefore need not be declared. (Default: 5.0 for the default '--filter-tfs-by zscores'.)", default=5.0, type=float)
+parser.add_argument("-tfl", "--lowerlimit_to_filter_tfs", help="Lower limit of the measure --filter-tfs-by. The value should be >0 for '--filter-tfs-by pcc' and >= 4.0 for '--filter-tfs-by zscores'. Note that the respective upper limits are 1.0 and infinity respectively, and therefore need not be declared. (Default: 4.75 for the default '--filter-tfs-by zscores'.)", default=4.75, type=float)
 parser.add_argument("-rt", "--use_random_TFs", help="If set, instead of using cell-net predicted TFs that make up the GRN for this gene, same number of random TFs as in the original set are collected for this gene. (Default: False)", action="store_true")
+parser.add_argument("-ltpm", "--take_log2_tpm", help="take log2 of tpm", default=True, type=bool)
 
 # ============= Arguments pertaining to algorithm ===========
 parser.add_argument("-w", "--init_wts_type", help="Relates to the initial wts set between the nodes. If 'random', random initial wts are set between any two nodes; if 'corr', initial wts between input and hidden nodes are set to the correlation values between the node feature and the expression of the gene, and the initial weights between hidden layers or the hidden layer and output is set to 0.5 (Default: 'corr')", choices=["random", "corr"], type=str, default="corr")
 parser.add_argument("-s", "--to_seed", help="If set, numpy seed number is set (only) for random splitting of the training and test samples. The seed number is set to 4. (Default: False)", action="store_true")
-parser.add_argument("-m", "--max_iter", help="Maximum number of interations for neural net optimization (Default: 300)", type=int, default=300)
+parser.add_argument("-m", "--max_iter", help="Maximum number of interations for neural net optimization (Default: 500)", type=int, default=500)
 
 # ============= Other arguments ===========
-parser.add_argument("-o", "--outputDir", help="Output directory. A directory for this gene of interest and set of parameters used is created at this location. (Default is '../Output')", type=str, default=os.path.join(os.getcwd(), "../Output"))
+parser.add_argument("-o", "--outputDir", help="Output directory. A directory for this gene of interest and set of parameters used is created at this location. (Default is '../Output')", type=str, default=os.path.join(os.getcwd(), "../../Output"))
 parser.add_argument("-k", "--run_id", help="Run_id for multiple parallel runs. This is useful in slurm. (Default: -1)", type=int, default=-1)
 
 args = parser.parse_args()
@@ -46,16 +53,11 @@ args = parser.parse_args()
 # ####### End of parser setup; Set up the logger info ###### #
 ############################################################
 
+
 def get_output_dir(args):
     # output files + directory parameters
     assert os.path.exists(args.outputDir)  # outputDir is updated below
     outputDir = "{0}/{1}_{2}kb_{3}_t{4}".format(args.outputDir, args.gene.upper(), args.distance, args.filter_tfs_by, args.lowerlimit_to_filter_tfs)
-    if (args.init_wts_type == "random"):
-        outputDir += "_rWts"
-    elif (args.init_wts_type == "corr"):
-        outputDir += "_cWts"
-    else:
-        raise Exception()
     outputDir += "_m" + str(args.max_iter)
     if (args.use_random_TFs):
         outputDir += "_rTFs"
@@ -68,6 +70,7 @@ def get_output_dir(args):
     if (not os.path.exists(outputDir)):
         os.makedirs(outputDir)
     return outputDir
+
 
 # create output dir, set the logging handlers (file + stream) and params
 outputDir = get_output_dir(args)  # creates a specific directory in args.outputDir
@@ -91,8 +94,32 @@ logger.info("Command line arguments: {}".format(args))
 ############################################################
 # ####### Set up the data for the model ###### #
 ############################################################
+start_time = time.time()
 
-args = Args()
-gv = Global_Vars(args)
+gv = Global_Vars(args, outputDir)  # gene and condition specific outputDir
 mp = Model_preparation(gv)
-# mp.tensorflow_model() .. (currently working)
+
+'''Run HPO on differen train/test splits'''
+for test_idx in range(0, 19):
+    tm = Tensorflow_model(gv, mp, test_eid_group_index=test_idx)
+    trials = hyperopt.Trials()
+
+    best_params = hyperopt.fmin(
+        tm.train_tensorflow_nn,
+        trials=trials,
+        space=get_parameter_space_forHPO(tm.trainX),
+        algo=tpe_method,     # Set up TPE for hyperparameter optimization
+        max_evals=13,     # Maximum number of iterations. Basically it trains at most 200 networks before choose the best one.
+    )
+
+    med_pc_test_error = tm.plot_scatter_performance(trials, gv, index=None)
+    tm.logger.info("Test Group {}:{}, Median Test Percentage Error: {}, Best Params: {}".format(
+        tm.test_eid_group_index, tm.test_eid_group,
+        round(med_pc_test_error, 4), best_params))
+
+    if (test_idx == 0):
+        break
+
+    del tm, trials
+
+logger.info("Total time taken: {}".format(time.time() - start_time))
