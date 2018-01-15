@@ -128,9 +128,6 @@ class Model_preparation(object):
     '''Normalize and split goi to train and test vectors.'''
 
     def get_normalized_train_val_and_test_goi(self, gv, train_eids, val_eids, test_eids):
-        '''First log transform the data'''
-        if (gv.take_log2_tpm):
-            gv.goi = np.log2(gv.goi)
 
         train_goi = gv.goi[gv.goi.index.isin(train_eids)]
         val_goi = gv.goi[gv.goi.index.isin(val_eids)]

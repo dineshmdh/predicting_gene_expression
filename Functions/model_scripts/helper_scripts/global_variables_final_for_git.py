@@ -1,3 +1,4 @@
+import pdb
 import re
 import os
 import random
@@ -71,12 +72,15 @@ class Global_Vars(object):
         self.csv_rnase = os.path.join(self.inputDir, "roadmap.rnase_imputed.LogRPKM.signal.mergedWTADlocs.txt")
         self.csv_cn = os.path.join(self.inputDir, "Human_Big_GRN_032014.csv")
 
-        '''Get the goi, roi, df_roi_dhss and df_tfs objects
-        (See description above __init__().)'''
+        ######################################################
+        ###### Get the goi, roi, df_roi_dhss and df_tfs objects (See description above __init__().) ######
+
         df_rnase = pd.read_csv(self.csv_rnase, sep="\t", index_col=["geneName", "loc", "TAD_loc"])
         self.goi = self.get_gene_ofInterest_info(df_rnase)
-        self.roi = self.get_roi(self.goi)  # need self.goi to get gene tss loc from goi.index
+        if (self.take_log2_tpm):
+            self.goi = np.log2(self.goi + 1)
 
+        self.roi = self.get_roi(self.goi)  # need self.goi to get gene tss loc from goi.index
         df_dhss = self.get_df_dhss(self.roi)
         self.df_dhss = self.filter_ftsIn_multiIndexed_df_by_pcc(df_dhss)
         if (self.use_random_DHSs):
@@ -96,6 +100,9 @@ class Global_Vars(object):
         (geneName, loc, tad_loc). The output will be abbreviated as "goi" hence-forth.
         The gex values are logged if self.take_log2_tpm == True.'''
         df_gene_ofInterest = df_rnase.iloc[df_rnase.index.get_level_values("geneName") == self.gene_ofInterest]
+        if (df_gene_ofInterest.shape[0] == 0):
+            self.logger.error("The gene name is not found. Double check the name.")
+            raise Exception("The gene name is not found. Double check the name?")
         gene_ofInterest_info = df_gene_ofInterest.iloc[0]
         return gene_ofInterest_info
 

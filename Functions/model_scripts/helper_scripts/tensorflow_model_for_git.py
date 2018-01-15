@@ -1,3 +1,4 @@
+import pdb
 import logging
 import os
 import tensorflow as tf
@@ -59,13 +60,16 @@ class Tensorflow_model(object):
 
         self.trainY = np.array(self.train_goi.tolist())
         self.trainY = self.trainY.reshape(self.trainY.shape[0], -1)
-
         self.valY = np.array(self.val_goi.tolist())
         self.valY = self.valY.reshape(self.valY.shape[0], -1)
         self.testY = np.array(self.test_goi.tolist())
         self.testY = self.testY.reshape(self.testY.shape[0], -1)
 
-        # print(self.trainX.shape, self.trainY.shape, self.testX.shape, self.testY.shape)
+        if (np.max(self.trainY) > 1):
+            self.logger.error("max(tm.trainY) was > 1..")  # warning only to debug
+            pdb.set_trace()
+
+        ############## end of __init__() #############
 
     def init_nn_updates(self):
         nn_updates = {}
@@ -165,7 +169,7 @@ class Tensorflow_model(object):
             nn_updates["yhat_train"] = sess.run(Yhat, feed_dict={X: self.trainX, Y: self.trainY, pkeep: 1})  # model prediction on the training set
             nn_updates["yhat_val"] = sess.run(Yhat, feed_dict={X: self.valX, Y: self.valY, pkeep: 1})
             if (np.isnan(nn_updates["yhat_val"]).any()):
-                self.logger.warning("yhat_val has a nan")
+                self.logger.warning("yhat_val has nan..")
                 nn_updates["status"] = "fail"
                 return nn_updates
             nn_updates["yhat_test"] = sess.run(Yhat, feed_dict={X: self.testX, Y: self.testY, pkeep: 1})
@@ -248,7 +252,7 @@ class Tensorflow_model(object):
             index = np.argmin(trials.losses())  # trial with least error
         plt.figure(figsize=(5, 5))
         sns.regplot(self.trainY.flatten(), trials.results[index]["yhat_train"].flatten(), robust=False, fit_reg=False, scatter_kws={'alpha': 0.45}, color="salmon")
-        sns.regplot(self.valY.flatten(), trials.results[index]["yhat_val"].flatten(), robust=False, fit_reg=False, color="honeydew")
+        sns.regplot(self.valY.flatten(), trials.results[index]["yhat_val"].flatten(), robust=False, fit_reg=False, color="mediumvioletred")
         sns.regplot(self.testY.flatten(), trials.results[index]["yhat_test"].flatten(), robust=False, fit_reg=False, color="steelblue")
         plt.xlim((0, 1.1))
         plt.ylim((0, 1.1))

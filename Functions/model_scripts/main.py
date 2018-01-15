@@ -101,25 +101,32 @@ mp = Model_preparation(gv)
 
 '''Run HPO on differen train/test splits'''
 for test_idx in range(0, 19):
-    tm = Tensorflow_model(gv, mp, test_eid_group_index=test_idx)
-    trials = hyperopt.Trials()
+    if (test_idx != 2):  # 4 corresponds to val_group of "ENCODE2012"; 3 to brain
+        continue
+    try:
+        tm = Tensorflow_model(gv, mp, test_eid_group_index=test_idx)
+        trials = hyperopt.Trials()
 
-    best_params = hyperopt.fmin(
-        tm.train_tensorflow_nn,
-        trials=trials,
-        space=get_parameter_space_forHPO(tm.trainX),
-        algo=tpe_method,     # Set up TPE for hyperparameter optimization
-        max_evals=13,     # Maximum number of iterations. Basically it trains at most 200 networks before choose the best one.
-    )
+        best_params = hyperopt.fmin(
+            tm.train_tensorflow_nn,
+            trials=trials,
+            space=get_parameter_space_forHPO(tm.trainX),
+            algo=tpe_method,     # Set up TPE for hyperparameter optimization
+            max_evals=20,     # Maximum number of iterations. Basically it trains at most 200 networks before choose the best one.
+        )
 
-    med_pc_test_error = tm.plot_scatter_performance(trials, gv, index=None)
-    tm.logger.info("Test Group {}:{}, Median Test Percentage Error: {}, Best Params: {}".format(
-        tm.test_eid_group_index, tm.test_eid_group,
-        round(med_pc_test_error, 4), best_params))
+        med_pc_test_error = tm.plot_scatter_performance(trials, gv, index=None)
+        logger.info("trainX.shape:{}, testX.shape:{}".format(tm.trainX.shape, tm.testX.shape))
+        logger.info("Test Group {}:{}, Median Test Percentage Error: {}, Best Params: {}".format(
+            tm.test_eid_group_index, tm.test_eid_group,
+            round(med_pc_test_error, 4), best_params))
 
-    if (test_idx == 0):
+        del tm, trials, best_params
+    except:
+        logger.warning("Test group index {} did not run to completion..")
+
+    if (test_idx == 3):
         break
 
-    del tm, trials
 
 logger.info("Total time taken: {}".format(time.time() - start_time))

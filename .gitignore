@@ -1,5 +1,7 @@
 .DS_Store
 Functions/notes.py
+*.pyc
+**/*.pyc
 Output/
 Input_files/
 previous_versions/
