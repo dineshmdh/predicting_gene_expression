@@ -101,7 +101,7 @@ mp = Model_preparation(gv)
 
 '''Run HPO on differen train/test splits'''
 for test_idx in range(0, 19):
-    if (test_idx != 2):  # 4 corresponds to val_group of "ENCODE2012"; 3 to brain
+    if (test_idx != 1):  # 4 corresponds to val_group of "ENCODE2012"; 3 to brain
         continue
     try:
         tm = Tensorflow_model(gv, mp, test_eid_group_index=test_idx)
