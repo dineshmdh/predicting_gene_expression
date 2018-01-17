@@ -3,7 +3,7 @@
 This program uses cross cell/tissue-type cis-TSS chromatin accessibility and known TF-TG (i.e. transcription factor to target gene) interactions for a given gene of interest to predict its expression in a new [or given] cell line of interest (not used in training).
 
 ## Dependencies and Installation
-The program has been developed and tested in Python v2.7 that comes with Anaconda v4.4.7. The following Python packages are required:
+The program has been developed and tested in `Python v2.7` that comes with `Anaconda v4.4.7`. The following Python packages are required:
 ```python
 numpy, pandas, hyperopt, matplotlib, seaborn, logging, functools, pybedtools, re
 ```
@@ -45,13 +45,13 @@ Arguments (Abbrv) | Arguments (Full) | Details
 
 ## Output example and preliminary result
 
-![Real vs predicted expression estimates for BIRC5 gene.] (https://github.com/dineshmdh/predicting_gene_expression/blob/master/Images/res_example1.png "An output example")
+![Real vs predicted expression estimates for BIRC5 gene.](https://github.com/dineshmdh/predicting_gene_expression/blob/master/Images/res_example1.png "An output example")
 
 In the prediction scatterplot example above, each dot represents one of 127 Roadmaps Epigenomics cell/tissue type. The pink, magenta and blue dots represent samples used in training, validation and test sets respectively. (The validation and test samples were not used in training.) The title of the plot shows the median test percentage error, i.e. median of (real expression - predicted expression) / real expression for all the cell types in the held out test group. (It should be noted that the 127 samples were grouped into 19 groups altogether on the basis of their developmental origin or lineages. The training-validation-testing partions in this program uses leave-one-group-out procedure. Hence, no muscle cell types were used in training for the following gene, for instance.)
 
-![Preliminary test results on 261 genes] (https://github.com/dineshmdh/predicting_gene_expression/blob/master/Images/res_med_test_error.png "Test results on 261 genes")
+![Preliminary test results on 261 genes](https://github.com/dineshmdh/predicting_gene_expression/blob/master/Images/res_med_test_error.png "Test results on 261 genes")
 
-The overlapping density plot above is an aggregate plot for all such median test percentage errors for a small subset of genes. (These genes are obtained from [this paper] (https://academic.oup.com/nar/article/45/20/11684/4107215) that are collectively either reprogrammed or non-reprogrammed during a myogenic transdifferentiation study.) The median test percentage error across all of these test groups is just 8.1 +/- 6.7 %.
+The overlapping density plot above is an aggregate plot for all such median test percentage errors for a small subset of genes. (These genes are obtained from [this paper](https://academic.oup.com/nar/article/45/20/11684/4107215 "MyoD paper") that are collectively either reprogrammed or non-reprogrammed during a myogenic transdifferentiation study.) The median test percentage error across all of these test groups is just 8.1 +/- 6.7 %.
 
 
 ## Contact
