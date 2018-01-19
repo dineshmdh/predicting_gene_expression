@@ -2,6 +2,8 @@
 
 This program uses cross cell/tissue-type cis-TSS chromatin accessibility and known TF-TG (i.e. transcription factor to target gene) interactions for a given gene of interest to predict its expression in a new [or given] cell line of interest (not used in training).
 
+Please see the [wiki page](https://github.com/dineshmdh/predicting_gene_expression/wiki/Cross-cell-type-prediction-of-gene-expression---WIKI) for details on the modeling framework, comparison against state-of-the-art and some current drawbacks.
+
 ## Dependencies and Installation
 The program has been developed and tested in `Python v2.7` that comes with `Anaconda v4.4.7`. The following Python packages are required:
 ```python
