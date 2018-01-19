@@ -2,7 +2,7 @@
 
 This program uses cross cell/tissue-type cis-TSS chromatin accessibility and known TF-TG (i.e. transcription factor to target gene) interactions for a given gene of interest to predict its expression in a new [or given] cell line of interest (not used in training).
 
-Please see the [wiki page](https://github.com/dineshmdh/predicting_gene_expression/wiki/Cross-cell-type-prediction-of-gene-expression---WIKI) for details on the modeling framework, comparison against state-of-the-art and some current drawbacks.
+Please see the [wiki page](https://github.com/dineshmdh/predicting_gene_expression/wiki/Cross-cell-type-prediction-of-gene-expression-WIKI) for details on the modeling framework, comparison against state-of-the-art and some current drawbacks.
 
 ## Dependencies and Installation
 The program has been developed and tested in `Python v2.7` that comes with `Anaconda v4.4.7`. The following Python packages are required:
@@ -21,13 +21,14 @@ To run the program, download and unzip source code, go to the Functions/model_sc
 
 ## Usage
 ```python
-python main.py [-h] [-d DISTANCE] [-u USE_TAD_INFO]
-                  [-F TAKE_THIS_MANY_TOP_DHS_FTS] [-rd]
-                  [-tff {pearson_corr,zscores}]
-                  [-tfl LOWERLIMIT_TO_FILTER_TFS] [-w {random,corr}] [-s]
-                  [-m MAX_ITER] [-o OUTPUTDIR] [-k RUN_ID]
-                  gene
-
+usage: main.py [-h] [-d DISTANCE] [-u USE_TAD_INFO]
+               [-dl PCC_LOWERLIMIT_TO_FILTER_DHSS]
+               [-F TAKE_THIS_MANY_TOP_FTS]
+               [-rd] [-tff {pcc,zscore}]
+               [-tfl LOWERLIMIT_TO_FILTER_TFS] [-rt]
+               [-w {random,corr}] [-m MAX_ITER]
+               [-o OUTPUTDIR] [-k RUN_ID]
+               gene
 ```
 Arguments (Abbrv) | Arguments (Full) | Details
 --- | --- | ---
@@ -53,8 +54,8 @@ In the prediction scatterplot example above, each dot represents one of 127 Road
 
 ![Preliminary test results on 261 genes](https://github.com/dineshmdh/predicting_gene_expression/blob/master/Images/res_med_test_error.png "Test results on 261 genes")
 
-The overlapping density plot above is an aggregate plot for all such median test percentage errors for a small subset of genes. (These genes are obtained from [this paper](https://academic.oup.com/nar/article/45/20/11684/4107215 "MyoD paper") that are collectively either reprogrammed or non-reprogrammed during a myogenic transdifferentiation study.) The median test percentage error across all of these test groups is just 8.1 +/- 6.7 %.
+The overlapping density plot above is an aggregate plot for all such median test percentage errors for a small subset of genes. (These genes are obtained from [this paper](https://academic.oup.com/nar/article/45/20/11684/4107215 "MyoD paper") that are collectively either reprogrammed or non-reprogrammed during a myogenic transdifferentiation study.) The median test percentage error across all of these test groups is just 8.1 +/- 6.7%.
 
 
 ## Contact
-Please email dm237 [at] duke.edu with any question(s), or idea(s).
+Please email dm237 [at] duke [dot] edu with any question(s), or idea(s).
