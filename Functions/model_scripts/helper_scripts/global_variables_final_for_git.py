@@ -1,3 +1,9 @@
+'''
+Created on Jan 1, 2018
+
+__author__ = "Dinesh Manandhar"
+
+'''
 import pdb
 import re
 import os
@@ -8,7 +14,7 @@ import pandas as pd
 from pybedtools import BedTool as bedtools
 # default bedtools column names: chrom, start, stop, name, score and strand.
 
-pd.options.mode.chained_assignment = 'warn'  # default='warn'; set to "None" to ignore warnings
+pd.set_option('mode.chained_assignment', None)  # default='warn'; set to "None" to ignore warnings
 pd.options.display.max_rows = 100
 pd.options.display.max_columns = 20  # default is 20
 pd.set_option('expand_frame_repr', False)
@@ -17,16 +23,13 @@ pd.set_option('expand_frame_repr', False)
 class Global_Vars(object):
     '''Here, we:
     1. load the rnase df, and get gene_ofInterest_info (goi).
-    2. get the region of interest (roi), dhss with signal in roi (df_dhss),
-    add known enhancers to the df (also add "has_known enhancers" col).
+    2. get the region of interest (roi), dhss with signal in roi (df_dhss).
     3. get the df with tfs (from cellnet) with their pcc and zscore info (df_tfs).
-
-    Note that we do not transform data in any way (eg. by taking log of tpm)
+    4. get random df_dhss for this gene, - only take_this_many_top_dhs_fts are selcted
+    5. get random df_tfs for this gene - PCC >= 0.3 is used to select random TFs
 
     To do:
-    1. add known enhancers to df_roi_dhss (also add "has_known enhancers" col),
-    3. get random df_dhss for this gene, - only take_this_many_top_dhs_fts are selcted
-    4. get random df_tfs for this gene.
+    - add known enhancers to the df (also add "has_known enhancers" col).
     '''
 
     def __init__(self, args, new_out_dir):
@@ -58,6 +61,10 @@ class Global_Vars(object):
         self.take_log2_tpm = args.take_log2_tpm
         self.filter_tfs_by = args.filter_tfs_by
         self.lowerlimit_to_filter_tfs = args.lowerlimit_to_filter_tfs
+        if (self.filter_tfs_by == "zscore"):
+            self.pcc_lowerlimit_to_filter_tfs = 0.3
+        else:
+            self.pcc_lowerlimit_to_filter_tfs = self.lowerlimit_to_filter_tfs
         self.take_this_many_top_fts = args.take_this_many_top_fts  # all dhss/tfs will already be filtered by pcc(or zscore)
         self.init_wts_type = args.init_wts_type
         self.inputDir = os.path.abspath("../../Input_files")
@@ -72,24 +79,31 @@ class Global_Vars(object):
         self.csv_rnase = os.path.join(self.inputDir, "roadmap.rnase_imputed.LogRPKM.signal.mergedWTADlocs.txt")
         self.csv_cn = os.path.join(self.inputDir, "Human_Big_GRN_032014.csv")
 
+        df_dhss = pd.read_csv(self.csv_dhss, sep="\t", index_col="loc")  # final df will be named self.df_dhss
+        df_rnase = pd.read_csv(self.csv_rnase, sep="\t", index_col=["geneName", "loc", "TAD_loc"])
+        df_cnTfs = pd.read_csv(self.csv_cn, sep=",", header=0)
         ######################################################
         ###### Get the goi, roi, df_roi_dhss and df_tfs objects (See description above __init__().) ######
 
-        df_rnase = pd.read_csv(self.csv_rnase, sep="\t", index_col=["geneName", "loc", "TAD_loc"])
         self.goi = self.get_gene_ofInterest_info(df_rnase)
         if (self.take_log2_tpm):
             self.goi = np.log2(self.goi + 1)
 
         self.roi = self.get_roi(self.goi)  # need self.goi to get gene tss loc from goi.index
-        df_dhss = self.get_df_dhss(self.roi)
-        self.df_dhss = self.filter_ftsIn_multiIndexed_df_by_pcc(df_dhss)
+        df_roi_dhss = self.get_df_dhss(self.roi, df_dhss)  # df_dhss overlapping self.roi
+        self.df_dhss = self.filter_ftsIn_multiIndexed_df_by_pcc(df_roi_dhss)
         if (self.use_random_DHSs):
-            self.df_dhss = self.get_random_dhs_df()  # dhss could be from different chromosomes
+            self.df_dhss = self.get_random_df_dhss_filtdBy_pcc_and_size(
+                df_dhss, max_dhs_num=self.df_dhss.shape[0])
 
-        df_tfs = self.get_df_tfs(df_rnase)
+        df_tfs = self.get_df_tfs(df_rnase, df_cnTfs)
         self.df_tfs = self.filter_tf_fts(df_tfs)
         if (self.use_random_TFs):
-            self.df_tfs = self.get_random_tfs_df()
+            self.df_tfs = self.get_random_df_tfs_filtdBy_pcc_and_size(
+                df_cnTfs, df_rnase, max_tfs_num=self.df_tfs.shape[0])
+
+        if (self.take_log2_tpm):
+            self.df_tfs = np.log2(self.df_tfs + 1)  # checked
         self.logger.info("Done. Setting up the training and testing split..")
         ################## end of __init__() ######################
 
@@ -121,15 +135,18 @@ class Global_Vars(object):
 
         return roi_chr, roi_upstream, roi_downstream
 
-    '''Given roi loc, get only those dhss that overlap it.
-    This function takes a few seconds to finish.'''
+    '''Given roi loc and df_dhss, get only those dhss that overlap it.
+    This function takes a few seconds to finish.
+    Arguments:
+        df_dhss is the original dhs with loc of chr:ss-es as index and
+        sample values as cols across.
+    '''
 
-    def get_df_dhss(self, roi_loc):
+    def get_df_dhss(self, roi_loc, df_dhss):
         roi_chr, roi_upstream, roi_downstream = roi_loc
         bed_roi = bedtools("{}\t{}\t{}".format(roi_chr, roi_upstream, roi_downstream), from_string=True)
 
         '''Get dhs locs only dataframe/bed object to do bedintersect with roi.'''
-        df_dhss = pd.read_csv(self.csv_dhss, sep="\t", index_col="loc")  # df_dhss is the original dhs with loc of chr:ss-es as index and sample values as cols across
         dhs_locs = [re.split(":|-", x) for x in df_dhss.index.tolist()]
         dhs_locs = [[x[0], int(x[1]), int(x[2])] for x in dhs_locs]
         df_dhs_locs = pd.DataFrame.from_records(dhs_locs, columns=["chrom", "ss", "es"])
@@ -167,23 +184,22 @@ class Global_Vars(object):
 
     '''Get df_tfs. The csv_cn_tfs file is read fast.'''
 
-    def get_df_cn_tfs(self):
+    def get_df_cn_tfs(self, df_cnTfs):
         '''df_tfs will have following original columns:
         TG TF zcores corr type species'''
-        df_cnTfs = pd.read_csv(self.csv_cn, sep=",", header=0)
         df_cnTfs = df_cnTfs[df_cnTfs["TG"] == self.gene_ofInterest]
         df_cnTfs = df_cnTfs.drop_duplicates(subset="TF", keep="first")  # some TFs could be present in >1 row
         df_cnTfs = df_cnTfs[["TF", "zscore", "corr"]]
         df_cnTfs.columns = ["geneName", "zscore", "cn_corr"]  # "geneName" will be used to merge with df_tfs later
         return df_cnTfs.set_index('geneName')
 
-    def get_df_tfs(self, df_rnase):
+    def get_df_tfs(self, df_rnase, df_cnTfs):
         '''df_tfs has "geneName", "loc", "TAD_loc", "zscore", "cn_corr" and "pcc" as index.
         The cols are gexes in samples / cell types. The TFs (i.e. "geneName") are filtered
         by self.filter_tfs_by argument (i.e. "zscore" or "pearson_corr") threshold and
         subsequently by self.take_this_many_top_fts on the same argument.
         '''
-        df_cnTfs = self.get_df_cn_tfs()  # has zscores and cn_corr as cols, and "geneName" (i.e. TFs) as indices
+        df_cnTfs = self.get_df_cn_tfs(df_cnTfs)  # has zscores and cn_corr as cols, and "geneName" (i.e. TFs) as indices
         df_tfs = df_rnase.iloc[df_rnase.index.get_level_values("geneName").isin(df_cnTfs.index)]
 
         '''First get the pcc values. Then merge the zscores and corr cols df and the pccs'''
@@ -209,18 +225,63 @@ class Global_Vars(object):
             df_tfs = self.filter_ftsIn_multiIndexed_df_by_pcc(df_tfs)
         return df_tfs
 
-    '''If random DHSs are to be selected, only select a random
-    collection of self.take_this_many_top_dhs_fts from the genome.'''
+    '''Return a random df of dhss filtered only by the self.pcc_lowerlimit_to_filter_dhss argument.
+    This will be used later to further randomly select dhss using the argument self.take_this_many_top_fts.
+    '''
 
-    def get_random_roi_dhs_df(self):
-        df_dhss = pd.read_csv(self.csv_dhss, sep="\t", index_col="loc")  # df_dhss is the original dhs with loc of chr:ss-es as index and sample values as cols across
-        rand_ints = sorted(random.sample(range(0, df_dhss.shape[0]), self.take_this_many_top_dhs_fts))  # sorted() will yield sorted list of dhss also
-        rand_locs = [df_dhss.index[x] for x in rand_ints]
-        df_dhss_random = df_dhss[df_dhss.index.isin(rand_locs)]
-        return df_dhss_random
+    def get_random_df_dhss_filtdBy_pcc(self, df_dhss, starting_num_dhss=1000):
+        rand_ints = sorted(random.sample(range(0, df_dhss.shape[0]), starting_num_dhss))
+        df_random = df_dhss.iloc[rand_ints, :]
 
-    def get_random_tfs_df(self):
-        pass
+        pccs = []
+        for ix in range(0, df_random.shape[0]):
+            pccs.append(np.corrcoef(df_random.iloc[ix], self.goi)[0, 1])
+
+        df_random["pcc"] = pccs
+        df_random["abs_pcc"] = [abs(x) for x in pccs]
+        df_random = df_random.sort_values(by=["abs_pcc"], ascending=False)
+        df_random = df_random[df_random["abs_pcc"] >= self.pcc_lowerlimit_to_filter_dhss]  # filter by abs_pcc
+
+        return df_random
+
+    '''Return a random df_dhss filtered by both self.pcc_lowerlimit_to_filter_dhss and
+    the size of the dhss df to get. The size is the max_dhs_num, which
+    is the number of real dhss being considered. Note that this already is the minimum
+    total DHS sites in ROI and self.take_this_many_dhss_fts argument.'''
+
+    def get_random_df_dhss_filtdBy_pcc_and_size(self, df_dhss, max_dhs_num):
+        df_random = self.get_random_df_dhss_filtdBy_pcc(df_dhss, starting_num_dhss=1000)
+        while (df_random.shape[0] < self.take_this_many_top_fts):  # which is highly unlikely (given starting_num_dhss is set high)
+            df_random = pd.concat([df_random, self.get_random_df_dhss_filtdBy_pcc(df_dhss, starting_num_dhss=500)], axis=0)
+            df_random = df_random.drop_duplicates()
+
+        rand_ints = sorted(random.sample(range(0, df_random.shape[0]), max_dhs_num))
+        df_random = df_random.iloc[rand_ints, :]
+        df_random = df_random.drop(["abs_pcc"], axis=1)
+        df_random = df_random.set_index("pcc", append=True)
+        return df_random
+
+    '''Function similar to self.get_random_df_dhss_filtdBy_pcc_and_size() above, but for TFs.
+    max_tfs_num is the size of the real number of TFs being considered. Also, note that
+    only those random TFs that pass the self.pcc_lowerlimit_to_filter_tfs threshold are selected.'''
+
+    def get_random_df_tfs_filtdBy_pcc_and_size(self, df_cnTfs, df_rnase, max_tfs_num):
+
+        all_tfs = list(set(df_cnTfs["TF"]))
+        df_random = df_rnase[df_rnase.index.get_level_values("geneName").isin(all_tfs)]
+
+        pccs = []
+        for ix in range(0, df_random.shape[0]):
+            pccs.append(np.corrcoef(df_random.iloc[ix], self.goi)[0, 1])
+
+        df_random["pcc"] = pccs
+        df_random["abs_pcc"] = [abs(x) for x in pccs]
+        df_random = df_random[df_random["abs_pcc"] >= self.pcc_lowerlimit_to_filter_tfs]
+        rand_ints = sorted(random.sample(range(0, df_random.shape[0]), max_tfs_num))
+        df_random = df_random.iloc[rand_ints, :]
+        df_random = df_random.drop(["abs_pcc"], axis=1)
+        df_random = df_random.set_index("pcc", append=True)
+        return df_random
 
 
 if __name__ == "__main__":
@@ -241,4 +302,4 @@ if __name__ == "__main__":
             self.max_iter = 300
 
     args = Args()
-    gv = Global_Vars(args)
+    gv = Global_Vars(args, args.outputDir)

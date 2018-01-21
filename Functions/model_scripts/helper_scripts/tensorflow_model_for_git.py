@@ -112,10 +112,10 @@ class Tensorflow_model(object):
             raise Exception()
         lamda = parameters['lamda']
         print("lamda:{}, layer_sizes:{}".format(lamda, layer_sizes))
-        max_iter = 500
+        max_iter = 300
         pkeep_train = 0.7
         starter_learning_rate = 0.7
-        decay_at_step = 30
+        decay_at_step = 15
         use_sigmoid_h1 = True
         use_sigmoid_h2 = True
         use_sigmoid_yhat = False

@@ -1,12 +1,13 @@
 '''
 Created on January 6, 2017
 '''
+import pdb
 import numpy as np
 import os
 import logging
 import pandas as pd
 
-pd.options.mode.chained_assignment = 'warn'  # default='warn' (see README.md)
+pd.set_option('mode.chained_assignment', None)  # default='warn' (see README.md)
 
 
 class Model_preparation(object):
@@ -152,10 +153,18 @@ class Model_preparation(object):
     def merge_dhs_and_tf_dfs(self, df_dhss, df_tfs, gv):
         '''For df_tfs: Reset, drop (some) cols, rename other cols and set them as index'''
         df_tfs = df_tfs.reset_index()
-        zscore_or_pcc_to_pop = set(["zscore", "pcc"]).difference(set([gv.filter_tfs_by])).pop()
-        cols_to_pop = ["loc", "TAD_loc", "cn_corr", zscore_or_pcc_to_pop]
-        df_tfs = df_tfs.drop(labels=cols_to_pop, axis=1)
-        df_tfs = df_tfs.rename(columns=dict(zip(["geneName", gv.filter_tfs_by], ["feat", "conf"])))
+
+        if not (gv.use_random_TFs):  # gv.filter_tfs_by could be either "zscore" or "pcc"
+            zscore_or_pcc_to_pop = set(["zscore", "pcc"]).difference(set([gv.filter_tfs_by])).pop()
+            cols_to_pop = ["loc", "TAD_loc", "cn_corr", zscore_or_pcc_to_pop]
+            df_tfs = df_tfs.drop(labels=cols_to_pop, axis=1)
+            df_tfs = df_tfs.rename(columns=dict(zip(["geneName", gv.filter_tfs_by], ["feat", "conf"])))
+
+        else:  # gv.filter_tfs_by could still be either "zscore" or "pcc", but only "pcc" is in gv.df_tfs
+            cols_to_pop = ["loc", "TAD_loc"]  # gv.df_tfs only has "loc", "TAD_loc" and 'pcc' fields available when random TFs are to be used
+            df_tfs = df_tfs.drop(labels=cols_to_pop, axis=1)
+            df_tfs = df_tfs.rename(columns=dict(zip(["geneName", "pcc"], ["feat", "conf"])))
+
         df_tfs = df_tfs.set_index(keys=["feat", "conf"])
 
         '''For df_dhss: Reset indices, change their (now column) names and set them as indices'''

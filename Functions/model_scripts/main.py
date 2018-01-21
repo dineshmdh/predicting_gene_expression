@@ -1,4 +1,15 @@
-# Created on Jan 1, 2018
+'''Created on Jan 1, 2018
+
+__author__ = "Dinesh Manandhar"
+
+
+Notes:
+1. Right now, users cannot
+    i) manipulate self.pcc_lowerlimit_to_filter_tfs and self.log2_tpm variables.
+    ii) choose validation group - it is fixed as 'ENCODE2012'
+
+
+'''
 
 import time
 import os  # os is being used to set up default outputDir
@@ -29,18 +40,17 @@ parser.add_argument("gene", help="Gene of interest", type=str)
 parser.add_argument("-d", "--distance", help="Distance from TSS (in kb) to cover as region of interest (Default: 200)", type=int, default=200)
 parser.add_argument("-u", "--use_tad_info", help="Use TAD boundaries to demarcate the boundaries for the region of interest. (Default: True)", type=bool, default=True)
 parser.add_argument("-dl", "--pcc_lowerlimit_to_filter_dhss", help="Lower limit of the absolute PCC(dhs site and gene expression) to be used in filtering top dhs sites. All DHS sites with pcc above this threshold are ignored. (Default: 0.2)", type=float, default=0.2)
-parser.add_argument("-F", "--take_this_many_top_fts", help="Take this many DHS sites (for dhsOnly model) or TFs (for tfsOnly model). For the DHSs+TFs joint model, top features from both sets are used. If this is set to '-1', then all the known DHS sites in the region TSS +/- --distance or regulatory TFs is used. (Default: 15)", type=int, default=15)
-parser.add_argument("-rd", "--use_random_DHSs", help="If set, a set of --take_this_many_top_dhs_fts number of DHS sites are randomly selected from the genome. (Default: False)", action="store_true")
+parser.add_argument("-F", "--take_this_many_top_fts", help="Take this many DHS sites (for dhsOnly model) or TFs (for tfsOnly model). For the DHSs+TFs joint model, top features from both sets are used. If this is set to '-1', then all the known DHS sites in the region TSS +/- --distance or regulatory TFs is used. Note that if random set of features are to be used, namely by setting either '-rd' or '-rt' (or both) options, then the same number of DHS sites or TFs are considered as in the non-random (i.e. original) set. (See details on '-rd' and '-rt' arguments below.) (Default: 15)", type=int, default=15)
+parser.add_argument("-rd", "--use_random_DHSs", help="If set, a set of DHS sites are randomly selected from the genome. The size of this set equals the size of the original (or non-random) feature set, which is equal to at most '--take_this_many_top_fts' DHS sites in the region of interest (eg. gene TSS+/-200kb) that have pearson correlation coefficient of at least '--pcc_lowerlimit_to_filter_dhss' value with the expression of the gene. (Default: False)", action="store_true")
 
 # ============= Arguments pertaining to the TFs ===========
 parser.add_argument("-tff", "--filter_tfs_by", help="For the TF-TG association, filter the predicted list of regulatory TFs for the given gene using one of two measures: 1) Pearson Correlation Coefficient between the expression of TF and the target gene TG, or 2) Z-score indicating the significance of one TF-TG association given perturbation measurements of the expression of the TF and the TG across various experimental or biological conditions (see CellNet paper and CLR algorithm). (Default: 'zscores')", choices=["pcc", "zscore"], type=str, default="zscore")
-parser.add_argument("-tfl", "--lowerlimit_to_filter_tfs", help="Lower limit of the measure --filter-tfs-by. The value should be >0 for '--filter-tfs-by pcc' and >= 4.0 for '--filter-tfs-by zscores'. Note that the respective upper limits are 1.0 and infinity respectively, and therefore need not be declared. (Default: 4.75 for the default '--filter-tfs-by zscores'.)", default=4.75, type=float)
-parser.add_argument("-rt", "--use_random_TFs", help="If set, instead of using cell-net predicted TFs that make up the GRN for this gene, same number of random TFs as in the original set are collected for this gene. (Default: False)", action="store_true")
+parser.add_argument("-tfl", "--lowerlimit_to_filter_tfs", help="Lower limit of the measure --filter-tfs-by in absolute value. The value should be >0 for '--filter-tfs-by pcc' and >= 4.0 for '--filter-tfs-by zscores'. Note that the respective upper limits are 1.0 and infinity respectively, and therefore need not be declared. (Default: 4.75 for the default '--filter-tfs-by zscores'.)", default=4.75, type=float)
+parser.add_argument("-rt", "--use_random_TFs", help="If set, instead of using cell-net predicted TFs that make up the GRN for this gene, same number of random TFs as in the original set are collected for this gene. In order to avoid selecting completely signal-free random features, only those TFs that have a pearson correlation coefficient of >= 0.3 are selected at random. Note that only PCC is used because 'zscore' confidence score for the CellNet TF-TG pair is not applicable. (Default: False)", action="store_true")
 parser.add_argument("-ltpm", "--take_log2_tpm", help="take log2 of tpm", default=True, type=bool)
 
 # ============= Arguments pertaining to algorithm ===========
 parser.add_argument("-w", "--init_wts_type", help="Relates to the initial wts set between the nodes. If 'random', random initial wts are set between any two nodes; if 'corr', initial wts between input and hidden nodes are set to the correlation values between the node feature and the expression of the gene, and the initial weights between hidden layers or the hidden layer and output is set to 0.5 (Default: 'corr')", choices=["random", "corr"], type=str, default="corr")
-parser.add_argument("-s", "--to_seed", help="If set, numpy seed number is set (only) for random splitting of the training and test samples. The seed number is set to 4. (Default: False)", action="store_true")
 parser.add_argument("-m", "--max_iter", help="Maximum number of interations for neural net optimization (Default: 500)", type=int, default=500)
 
 # ============= Other arguments ===========
@@ -48,6 +58,19 @@ parser.add_argument("-o", "--outputDir", help="Output directory. A directory for
 parser.add_argument("-k", "--run_id", help="Run_id for multiple parallel runs. This is useful in slurm. (Default: -1)", type=int, default=-1)
 
 args = parser.parse_args()
+
+# Check for basic argument setup
+if (args.filter_tfs_by == "zscore"):
+    try:
+        assert args.lowerlimit_to_filter_tfs >= 4.0
+    except:
+        raise Exception("Make sure --lowerlimit_to_filter_tfs is set to match --filter_tfs_by.")
+else:
+    try:
+        assert 0 < args.lowerlimit_to_filter_tfs < 1
+    except:
+        raise Exception("Make sure --lowerlimit_to_filter_tfs is set to match --filter_tfs_by.")
+
 
 ############################################################
 # ####### End of parser setup; Set up the logger info ###### #
@@ -90,6 +113,10 @@ logger.addHandler(file_handler)
 logger.addHandler(stream_handler)
 
 logger.info("Command line arguments: {}".format(args))
+
+if (args.use_random_TFs):
+    logger.info("Note: only those TFs with PCC >= 0.3 with this gene are selected (at random).")
+
 
 ############################################################
 # ####### Set up the data for the model ###### #
