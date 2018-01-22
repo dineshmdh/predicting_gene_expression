@@ -20,7 +20,7 @@ tpe_method = partial(
     hyperopt.tpe.suggest,
     n_EI_candidates=60,  # 30 # Sample __ candidate and select candidate that has highest Expected Improvement (EI)
     gamma=0.2,  # Use 20% of best observations to estimate next set of parameters
-    n_startup_jobs=2,  # 10 # First __ trials are going to be random
+    n_startup_jobs=5,  # 10 # First __ trials are going to be random
 )
 
 

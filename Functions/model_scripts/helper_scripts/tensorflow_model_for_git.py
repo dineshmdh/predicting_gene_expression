@@ -29,7 +29,8 @@ class Tensorflow_model(object):
         self.logger.addHandler(file_handler)
         self.logger.addHandler(stream_handler)
         ######################################################
-
+        ########## set basic params #########
+        self.max_iter = gv.max_iter
         self.test_eid_group_index = test_eid_group_index
 
         ########## from model preparation ##########
@@ -87,11 +88,11 @@ class Tensorflow_model(object):
         # success in train?
         l, p = sess.run([loss, pcc], feed_dict=train_data)
         nn_updates["train_loss"].append(l)
-        nn_updates["train_pcc"].append(p)
+        nn_updates["train_pcc"].append(p[0])
         # success in val?
         l_, p_ = sess.run([loss, pcc], feed_dict=val_data)
         nn_updates["val_loss"].append(l_)
-        nn_updates["val_pcc"].append(p_)
+        nn_updates["val_pcc"].append(p_[0])
 
         return nn_updates
 
@@ -112,7 +113,6 @@ class Tensorflow_model(object):
             raise Exception()
         lamda = parameters['lamda']
         print("lamda:{}, layer_sizes:{}".format(lamda, layer_sizes))
-        max_iter = 300
         pkeep_train = 0.7
         starter_learning_rate = 0.7
         decay_at_step = 15
@@ -154,7 +154,7 @@ class Tensorflow_model(object):
             init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
             sess.run(init)
 
-            for i in range(max_iter):
+            for i in range(self.max_iter):
 
                 train_data = {X: self.trainX, Y: self.trainY, pkeep: pkeep_train}
                 sess.run(train_step, feed_dict=train_data)
@@ -177,7 +177,7 @@ class Tensorflow_model(object):
             nn_updates["W2"] = W2.eval()
             if not (wts[3] is None):
                 nn_updates["W3"] = W3.eval()
-            nn_updates["loss"] = nn_updates["val_loss"][-1]  # / np.sqrt(nn_updates["train_pcc"][-1]) throws error
+            nn_updates["loss"] = nn_updates["val_loss"][-1]  # / np.sqrt(nn_updates["val_pcc"][-1] + 0.0001)
             nn_updates["status"] = STATUS_OK
         return nn_updates
 
@@ -240,10 +240,10 @@ class Tensorflow_model(object):
             wts[3] = np.random.randn(h2, o)
         return wts
 
-    def get_percentage_error(self, predicted_yhat):
+    def get_percentage_error(self, real_yhat, predicted_yhat):
         pes = []  # pes = percentage errors
-        y_minus_yhat = abs(self.testY.flatten() - predicted_yhat.flatten())
-        for a, b in zip(y_minus_yhat, self.testY.flatten()):
+        y_minus_yhat = abs(real_yhat.flatten() - predicted_yhat.flatten())
+        for a, b in zip(y_minus_yhat, real_yhat.flatten()):
             pes.append(a / b)
         return pes
 
@@ -259,12 +259,14 @@ class Tensorflow_model(object):
         plt.plot([[0, 0], [1, 1]], "--")
         plt.xlabel("Real RPKM signal normalized")
         plt.ylabel("Predicted RPKM signal")
-        med_pc_test_error = np.median(self.get_percentage_error(trials.results[index]["yhat_test"].flatten()))
-        plt.title("{}, Test Group:{},\nMedian test % error: {}".format(gv.gene_ofInterest, self.test_eid_group, round(med_pc_test_error, 2)))
+        med_pc_test_error = np.median(self.get_percentage_error(self.testY, trials.results[index]["yhat_test"].flatten()))
+        med_pc_val_error = np.median(self.get_percentage_error(self.valY, trials.results[index]["yhat_val"].flatten()))
+        plt.title("{}, Test Group:{},\nMedian (val, test) % error: ({}, {})".format(gv.gene_ofInterest, self.test_eid_group,
+                                                                                    round(med_pc_test_error, 2), round(med_pc_val_error, 2)))
 
         fig_name = "{}_perf_on_{}.pdf".format(gv.gene_ofInterest, self.test_eid_group)
         plt.savefig(os.path.join(gv.outputDir, fig_name))
-        return med_pc_test_error
+        return med_pc_test_error, med_pc_val_error
 
 
 if __name__ == "__main__":

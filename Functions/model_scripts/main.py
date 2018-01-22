@@ -15,6 +15,7 @@ import time
 import os  # os is being used to set up default outputDir
 import argparse
 import sys
+import numpy as np
 
 import hyperopt
 from hyperopt import fmin
@@ -128,25 +129,26 @@ mp = Model_preparation(gv)
 
 '''Run HPO on differen train/test splits'''
 for test_idx in range(0, 19):
-    if (test_idx != 1):  # 4 corresponds to val_group of "ENCODE2012"; 3 to brain
+    if (test_idx == 4):  # 4 corresponds to val_group of "ENCODE2012"; 3 to brain
         continue
     try:
         tm = Tensorflow_model(gv, mp, test_eid_group_index=test_idx)
         trials = hyperopt.Trials()
 
-        best_params = hyperopt.fmin(
-            tm.train_tensorflow_nn,
-            trials=trials,
-            space=get_parameter_space_forHPO(tm.trainX),
-            algo=tpe_method,     # Set up TPE for hyperparameter optimization
-            max_evals=20,     # Maximum number of iterations. Basically it trains at most 200 networks before choose the best one.
-        )
+        best_params = hyperopt.fmin(tm.train_tensorflow_nn, trials=trials,
+                                    space=get_parameter_space_forHPO(tm.trainX), algo=tpe_method, max_evals=10)
 
-        med_pc_test_error = tm.plot_scatter_performance(trials, gv, index=None)
+        med_pc_test_error, med_pc_val_error = tm.plot_scatter_performance(trials, gv, index=None)
+        med_val_pcc = trials.results[np.argmin(trials.losses())]["val_pcc"].flatten()[-1]
         logger.info("trainX.shape:{}, testX.shape:{}".format(tm.trainX.shape, tm.testX.shape))
-        logger.info("Test Group {}:{}, Median Test Percentage Error: {}, Best Params: {}".format(
+        logger.info("Test Group {}: {},\
+                    Median Test pc Error: {},\
+                    Median Val (pc error, pcc): ({},{})\
+                    Best Params: {}".format(
             tm.test_eid_group_index, tm.test_eid_group,
-            round(med_pc_test_error, 4), best_params))
+            round(med_pc_test_error, 3),
+            round(med_pc_val_error, 3), round(med_val_pcc, 3),
+            best_params))
 
         del tm, trials, best_params
     except:

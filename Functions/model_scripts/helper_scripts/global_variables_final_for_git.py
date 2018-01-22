@@ -71,6 +71,10 @@ class Global_Vars(object):
         self.outputDir = new_out_dir
         self.use_random_DHSs = args.use_random_DHSs
         self.use_random_TFs = args.use_random_TFs
+
+        ####### other variables specific to NN #######
+        self.max_iter = args.max_iter
+
         ######################################################
         ###### read and set up the basic data frames ######
         # self.csv_enhancer_tss = os.path.join(self.inputDir, "enhancer_tss_associations.bed")
@@ -102,8 +106,8 @@ class Global_Vars(object):
             self.df_tfs = self.get_random_df_tfs_filtdBy_pcc_and_size(
                 df_cnTfs, df_rnase, max_tfs_num=self.df_tfs.shape[0])
 
-        if (self.take_log2_tpm):
-            self.df_tfs = np.log2(self.df_tfs + 1)  # checked
+        # if (self.take_log2_tpm):
+        #   self.df_tfs = np.log2(self.df_tfs + 1)  # checked
         self.logger.info("Done. Setting up the training and testing split..")
         ################## end of __init__() ######################
 
