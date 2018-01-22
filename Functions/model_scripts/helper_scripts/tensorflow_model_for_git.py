@@ -7,6 +7,7 @@ import seaborn as sns
 from hyperopt import STATUS_OK
 import matplotlib.pyplot as plt
 plt.switch_backend('agg')
+np.seterr(divide='ignore', invalid='ignore')
 
 
 class Tensorflow_model(object):

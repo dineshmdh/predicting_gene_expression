@@ -10,7 +10,7 @@ Notes:
 
 
 '''
-
+import pdb
 import time
 import os  # os is being used to set up default outputDir
 import argparse
@@ -89,8 +89,6 @@ def get_output_dir(args):
         outputDir += "_rDHSs"
     if (args.run_id > 0):  # rank is >=1; if > 0, means running for multiple set of random TFs for the same gene_ofInterest
         outputDir += "_run" + str(args.run_id)
-    if (args.to_seed):
-        outputDir += "_s"
     if (not os.path.exists(outputDir)):
         os.makedirs(outputDir)
     return outputDir
@@ -128,7 +126,7 @@ gv = Global_Vars(args, outputDir)  # gene and condition specific outputDir
 mp = Model_preparation(gv)
 
 '''Run HPO on differen train/test splits'''
-for test_idx in range(0, 19):
+for test_idx in range(0, 2):
     if (test_idx == 4):  # 4 corresponds to val_group of "ENCODE2012"; 3 to brain
         continue
     try:
@@ -139,7 +137,7 @@ for test_idx in range(0, 19):
                                     space=get_parameter_space_forHPO(tm.trainX), algo=tpe_method, max_evals=10)
 
         med_pc_test_error, med_pc_val_error = tm.plot_scatter_performance(trials, gv, index=None)
-        med_val_pcc = trials.results[np.argmin(trials.losses())]["val_pcc"].flatten()[-1]
+        med_val_pcc = trials.results[np.argmin(trials.losses())]["val_pcc"][-1]
         logger.info("trainX.shape:{}, testX.shape:{}".format(tm.trainX.shape, tm.testX.shape))
         logger.info("Test Group {}: {},\
                     Median Test pc Error: {},\
@@ -156,6 +154,5 @@ for test_idx in range(0, 19):
 
     if (test_idx == 3):
         break
-
 
 logger.info("Total time taken: {}".format(time.time() - start_time))
