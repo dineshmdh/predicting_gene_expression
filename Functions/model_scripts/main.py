@@ -126,8 +126,8 @@ gv = Global_Vars(args, outputDir)  # gene and condition specific outputDir
 mp = Model_preparation(gv)
 
 '''Run HPO on differen train/test splits'''
-for test_idx in range(0, 2):
-    if (test_idx == 4):  # 4 corresponds to val_group of "ENCODE2012"; 3 to brain
+for test_idx in range(6, 7):
+    if (test_idx == 4):  # 4 corresponds to val_group of "ENCODE2012"; 3 to brain; 6 to ESC
         continue
     try:
         tm = Tensorflow_model(gv, mp, test_eid_group_index=test_idx)
@@ -139,10 +139,7 @@ for test_idx in range(0, 2):
         med_pc_test_error, med_pc_val_error = tm.plot_scatter_performance(trials, gv, index=None)
         med_val_pcc = trials.results[np.argmin(trials.losses())]["val_pcc"][-1]
         logger.info("trainX.shape:{}, testX.shape:{}".format(tm.trainX.shape, tm.testX.shape))
-        logger.info("Test Group {}: {},\
-                    Median Test pc Error: {},\
-                    Median Val (pc error, pcc): ({},{})\
-                    Best Params: {}".format(
+        logger.info("Test Group {}: {}, Median Test pc Error: {}, Median Val (pc error, pcc): ({},{}) Best Params: {}".format(
             tm.test_eid_group_index, tm.test_eid_group,
             round(med_pc_test_error, 3),
             round(med_pc_val_error, 3), round(med_val_pcc, 3),
@@ -151,8 +148,5 @@ for test_idx in range(0, 2):
         del tm, trials, best_params
     except:
         logger.warning("Test group index {} did not run to completion..")
-
-    if (test_idx == 3):
-        break
 
 logger.info("Total time taken: {}".format(time.time() - start_time))
