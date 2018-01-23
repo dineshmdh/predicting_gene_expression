@@ -81,7 +81,7 @@ class Global_Vars(object):
 
         self.csv_dhss = os.path.join(self.inputDir, "roadmap.dnase_imputed.merged_by_samplesAndBedTools.pval.signal.txt")
         self.csv_rnase = os.path.join(self.inputDir, "roadmap.rnase_imputed.LogRPKM.signal.mergedWTADlocs.txt")
-        self.csv_cn = os.path.join(self.inputDir, "Human_Big_GRN_032014.csv")
+        self.csv_cn = os.path.join(self.inputDir, "cnProc_ctGRNs_overallGRN_grnTable.csv")  # "Human_Big_GRN_032014.csv")
 
         df_dhss = pd.read_csv(self.csv_dhss, sep="\t", index_col="loc")  # final df will be named self.df_dhss
         df_rnase = pd.read_csv(self.csv_rnase, sep="\t", index_col=["geneName", "loc", "TAD_loc"])
@@ -256,7 +256,7 @@ class Global_Vars(object):
     def get_random_df_dhss_filtdBy_pcc_and_size(self, df_dhss, max_dhs_num):
         # Note that self.goi is not yet log-transformed
         df_random = self.get_random_df_dhss_filtdBy_pcc(df_dhss, starting_num_dhss=1000)
-        while (df_random.shape[0] < self.take_this_many_top_fts):  # which is highly unlikely (given starting_num_dhss is set high)
+        while (df_random.shape[0] < max_dhs_num):  # which is highly unlikely (given starting_num_dhss is set high)
             df_random = pd.concat([df_random, self.get_random_df_dhss_filtdBy_pcc(df_dhss, starting_num_dhss=500)], axis=0)
             df_random = df_random.drop_duplicates()
 
