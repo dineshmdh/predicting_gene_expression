@@ -90,6 +90,8 @@ class Global_Vars(object):
         ###### Get the goi, roi, df_roi_dhss and df_tfs objects (See description above __init__().) ######
 
         self.goi = self.get_gene_ofInterest_info(df_rnase)
+        if (self.take_log2_tpm):
+            self.goi = np.log2(self.goi + 1)
 
         self.roi = self.get_roi(self.goi)  # need self.goi to get gene tss loc from goi.index
         df_roi_dhss = self.get_df_dhss(self.roi, df_dhss)  # df_dhss overlapping self.roi
@@ -98,17 +100,12 @@ class Global_Vars(object):
             self.df_dhss = self.get_random_df_dhss_filtdBy_pcc_and_size(
                 df_dhss, max_dhs_num=self.df_dhss.shape[0])
 
-        df_tfs = self.get_df_tfs(df_rnase, df_cnTfs)
+        df_tfs = self.get_df_tfs(df_rnase, df_cnTfs)  # tf gexes are log-transformed before getting pccs
         self.df_tfs = self.filter_tf_fts(df_tfs)
         if (self.use_random_TFs):
             self.df_tfs = self.get_random_df_tfs_filtdBy_pcc_and_size(
                 df_cnTfs, df_rnase, max_tfs_num=self.df_tfs.shape[0])
 
-        if (self.take_log2_tpm):
-            self.goi = np.log2(self.goi + 1)
-
-        # if (self.take_log2_tpm):
-        #   self.df_tfs = np.log2(self.df_tfs + 1)  # checked
         self.logger.info("Done. Setting up the training and testing split..")
         ################## end of __init__() ######################
 
@@ -206,6 +203,8 @@ class Global_Vars(object):
         '''
         df_cnTfs = self.get_df_cn_tfs(df_cnTfs)  # has zscores and cn_corr as cols, and "geneName" (i.e. TFs) as indices
         df_tfs = df_rnase.iloc[df_rnase.index.get_level_values("geneName").isin(df_cnTfs.index)]
+        if (self.take_log2_tpm):
+            df_tfs = np.log2(df_tfs + 1)
 
         '''First get the pcc values. Then merge the zscores and corr cols df and the pccs'''
         pccs = []
