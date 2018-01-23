@@ -63,3 +63,44 @@ To our knowledge, this is the first cross - cell type prediction framework that 
 1. One major limitation of the model is that the list of regulatory TFs predicted to regulate the gene of interest is not complete. The TF - TG(i.e. TF - Target Gene) list is obtained from CellNet has low recall, meaning the number of false negatives is high. A higher quality human TF - TG network would therefore help improve the model performance.
 2. Another limitation is that we inherently do not consider other modes of gene regulation, such as 3 - D enhancer loops, micro - RNA and eQTL based regulation. Despite this, our model seems to perform well, indicating that the the regulation of many genes can be predicted efficiently without data on "higher order" modes of regulation.
 3. By design of our leave - one - tissue - group - out learning framework, our model does not perform well for tissue - specific genes tested against the same tissues.
+
+
+========================
+# edited functions to normalize to [0-1] scale..
+
+    def get_normalized_train_val_test_dfs(self, df, train_eids, val_eids, test_eids):
+
+        train_df = df[train_eids]
+        min_in_train = np.amin(np.array(train_df))
+        train_shifted = (train_df - min_in_train)
+        max_in_train = np.amax(np.array(train_shifted))
+        train_df_normed = train_shifted.div(max_in_train)
+
+        val_df = df[val_eids]
+        val_df_normed = (val_df - min_in_train).div(max_in_train)
+
+        test_df = df[test_eids]
+        test_df_normed = (test_df - min_in_train).div(max_in_train)
+        return train_df_normed, val_df_normed, test_df_normed
+
+    '''Normalize and split goi to train and test vectors.'''
+
+    def get_normalized_train_val_and_test_goi(self, gv, train_eids, val_eids, test_eids):
+
+        train_goi = gv.goi[gv.goi.index.isin(train_eids)]
+        val_goi = gv.goi[gv.goi.index.isin(val_eids)]
+        test_goi = gv.goi[gv.goi.index.isin(test_eids)]
+        assert np.array_equal(train_eids, train_goi.index.tolist())  # check the order of samples
+        assert np.array_equal(val_eids, val_goi.index.tolist())
+        assert np.array_equal(test_eids, test_goi.index.tolist())
+
+        '''Now normalize'''
+        min_gex_in_train = min(train_goi)
+        train_goi_shifted = (train_goi - min_gex_in_train)
+        max_gex_in_train = max(train_goi_shifted)
+
+        train_goi = train_goi_shifted / max_gex_in_train
+        val_goi = (val_goi - min_gex_in_train) / max_gex_in_train
+        test_goi = (test_goi - min_gex_in_train) / max_gex_in_train
+
+        return train_goi, val_goi, test_goi
