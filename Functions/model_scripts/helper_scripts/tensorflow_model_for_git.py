@@ -262,8 +262,8 @@ class Tensorflow_model(object):
         plt.ylabel("Predicted RPKM signal")
         med_pc_test_error = np.median(self.get_percentage_error(self.testY, trials.results[index]["yhat_test"].flatten()))
         med_pc_val_error = np.median(self.get_percentage_error(self.valY, trials.results[index]["yhat_val"].flatten()))
-        plt.title("{}, Test Group:{},\nMedian (val, test) % error: ({}, {})".format(gv.gene_ofInterest, self.test_eid_group,
-                                                                                    round(med_pc_val_error, 2), round(med_pc_test_error, 2)))
+        val_pcc = trials.results[index]["val_pcc"][-1]
+        plt.title("{}, Test Group:{},\nMedian (val, test) % error: ({:.3f}, {:.3f}), Val PCC:{:.3f}".format(gv.gene_ofInterest, self.test_eid_group, med_pc_val_error, med_pc_test_error, val_pcc))
 
         fig_name = "{}_perf_on_{}.pdf".format(gv.gene_ofInterest, self.test_eid_group)
         plt.savefig(os.path.join(gv.outputDir, fig_name))
