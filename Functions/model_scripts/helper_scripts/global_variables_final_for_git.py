@@ -62,7 +62,7 @@ class Global_Vars(object):
         self.filter_tfs_by = args.filter_tfs_by
         self.lowerlimit_to_filter_tfs = args.lowerlimit_to_filter_tfs
         if (self.filter_tfs_by == "zscore"):
-            self.pcc_lowerlimit_to_filter_tfs = 0.3
+            self.pcc_lowerlimit_to_filter_tfs = 0.1
         else:
             self.pcc_lowerlimit_to_filter_tfs = self.lowerlimit_to_filter_tfs
         self.take_this_many_top_fts = args.take_this_many_top_fts  # all dhss/tfs will already be filtered by pcc(or zscore)
@@ -90,8 +90,6 @@ class Global_Vars(object):
         ###### Get the goi, roi, df_roi_dhss and df_tfs objects (See description above __init__().) ######
 
         self.goi = self.get_gene_ofInterest_info(df_rnase)
-        if (self.take_log2_tpm):
-            self.goi = np.log2(self.goi + 1)
 
         self.roi = self.get_roi(self.goi)  # need self.goi to get gene tss loc from goi.index
         df_roi_dhss = self.get_df_dhss(self.roi, df_dhss)  # df_dhss overlapping self.roi
@@ -105,6 +103,9 @@ class Global_Vars(object):
         if (self.use_random_TFs):
             self.df_tfs = self.get_random_df_tfs_filtdBy_pcc_and_size(
                 df_cnTfs, df_rnase, max_tfs_num=self.df_tfs.shape[0])
+
+        if (self.take_log2_tpm):
+            self.goi = np.log2(self.goi + 1)
 
         # if (self.take_log2_tpm):
         #   self.df_tfs = np.log2(self.df_tfs + 1)  # checked
@@ -254,6 +255,7 @@ class Global_Vars(object):
     total DHS sites in ROI and self.take_this_many_dhss_fts argument.'''
 
     def get_random_df_dhss_filtdBy_pcc_and_size(self, df_dhss, max_dhs_num):
+        # Note that self.goi is not yet log-transformed
         df_random = self.get_random_df_dhss_filtdBy_pcc(df_dhss, starting_num_dhss=1000)
         while (df_random.shape[0] < self.take_this_many_top_fts):  # which is highly unlikely (given starting_num_dhss is set high)
             df_random = pd.concat([df_random, self.get_random_df_dhss_filtdBy_pcc(df_dhss, starting_num_dhss=500)], axis=0)
@@ -270,6 +272,7 @@ class Global_Vars(object):
     only those random TFs that pass the self.pcc_lowerlimit_to_filter_tfs threshold are selected.'''
 
     def get_random_df_tfs_filtdBy_pcc_and_size(self, df_cnTfs, df_rnase, max_tfs_num):
+        # Note that self.goi is not yet log-transformed
 
         all_tfs = list(set(df_cnTfs["TF"]))
         df_random = df_rnase[df_rnase.index.get_level_values("geneName").isin(all_tfs)]
