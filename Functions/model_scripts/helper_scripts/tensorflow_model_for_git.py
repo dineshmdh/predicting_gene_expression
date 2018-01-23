@@ -178,7 +178,7 @@ class Tensorflow_model(object):
             nn_updates["W2"] = W2.eval()
             if not (wts[3] is None):
                 nn_updates["W3"] = W3.eval()
-            nn_updates["loss"] = nn_updates["val_loss"][-1]  # / np.sqrt(nn_updates["val_pcc"][-1] + 0.0001)
+            nn_updates["loss"] = 1 - nn_updates["val_pcc"][-1]  # / np.sqrt(nn_updates["val_pcc"][-1] + 0.0001)
             nn_updates["status"] = STATUS_OK
         return nn_updates
 
