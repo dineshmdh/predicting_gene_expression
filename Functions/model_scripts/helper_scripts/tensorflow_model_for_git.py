@@ -263,7 +263,7 @@ class Tensorflow_model(object):
         med_pc_test_error = np.median(self.get_percentage_error(self.testY, trials.results[index]["yhat_test"].flatten()))
         med_pc_val_error = np.median(self.get_percentage_error(self.valY, trials.results[index]["yhat_val"].flatten()))
         plt.title("{}, Test Group:{},\nMedian (val, test) % error: ({}, {})".format(gv.gene_ofInterest, self.test_eid_group,
-                                                                                    round(med_pc_test_error, 2), round(med_pc_val_error, 2)))
+                                                                                    round(med_pc_val_error, 2), round(med_pc_test_error, 2)))
 
         fig_name = "{}_perf_on_{}.pdf".format(gv.gene_ofInterest, self.test_eid_group)
         plt.savefig(os.path.join(gv.outputDir, fig_name))
