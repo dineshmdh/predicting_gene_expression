@@ -175,7 +175,7 @@ class Global_Vars(object):
     1. By abs_pcc: ignore fts with low pcc.
     2. By take_this_many_top_fts: only fts with topmost pccs selected.'''
 
-    def filter_ftsIn_multiIndexed_df_by_pcc(self, df):
+    def filter_ftsIn_multiIndexed_df_by_pcc_and_size(self, df):
         df["abs_pcc"] = abs(df.index.get_level_values("pcc"))
         df = df.sort_values(by=["abs_pcc"], ascending=False)
         df = df[df["abs_pcc"] >= self.pcc_lowerlimit_to_filter_dhss]  # filter by abs_pcc
@@ -226,7 +226,7 @@ class Global_Vars(object):
             if (df_tfs.shape[0] > self.take_this_many_top_fts > 0):  # self.take_this_many_top_fts is set to -1 if all fts are to be used
                 df_tfs = df_tfs.sort_index(axis=0, level="zscore", ascending=False)[:self.take_this_many_top_fts]
         else:
-            df_tfs = self.filter_ftsIn_multiIndexed_df_by_pcc(df_tfs)
+            df_tfs = self.filter_ftsIn_multiIndexed_df_by_pcc_and_size(df_tfs)
         return df_tfs
 
     '''Return a random df of dhss filtered only by the self.pcc_lowerlimit_to_filter_dhss argument.
