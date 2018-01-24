@@ -6,7 +6,7 @@ import tensorflow as tf
 import numpy as np
 import scipy.stats as stats
 import seaborn as sns
-from hyperopt import STATUS_OK
+from hyperopt import STATUS_OK, STATUS_FAIL
 import matplotlib.pyplot as plt
 
 np.seterr(all='raise')
@@ -117,7 +117,6 @@ class Tensorflow_model(object):
         else:
             raise Exception()
         lamda = parameters['lamda']
-        print("lamda:{}, layer_sizes:{}".format(lamda, layer_sizes))
         pkeep_train = 0.7
         starter_learning_rate = 0.5
         decay_at_step = 15
@@ -146,7 +145,7 @@ class Tensorflow_model(object):
         Yhat, loss = self.tf_model(X, Y, W1, W2, W3, b1, g1, b2, g2, pkeep, lamda)  # loss == rmse
 
         # ------ train parameters -----
-        global_step = tf.Variable(0, trainable=False, name="global_step")  # this is like a counter when passed to minimize() function
+        global_step = tf.Variable(0, trainable=False, name="global_step")  # like a counter for minimize() function
         learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
                                                    decay_steps=decay_at_step, decay_rate=0.96, staircase=True)
         train_step = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step=global_step)
@@ -170,20 +169,26 @@ class Tensorflow_model(object):
                     nn_updates = self.get_performance_updates(sess, loss, pcc, train_data, val_data, nn_updates)
 
             ########## Now predict the performance, and update the output dict ########
+            nn_updates["loss"] = 1 - nn_updates["val_pcc"][-1]  # / np.sqrt(nn_updates["val_pcc"][-1] + 0.0001)
+            if (np.any(np.isnan(nn_updates["loss"]))):
+                pdb.set_trace()
+                nn_updates["loss"] = None  # https://github.com/hyperopt/hyperopt/pull/176
+                nn_updates["status"] = STATUS_FAIL
+            else:
+                nn_updates["status"] = STATUS_OK
+
             nn_updates = self.get_performance_updates(sess, loss, pcc, train_data, val_data, nn_updates)
-            nn_updates["yhat_train"] = sess.run(Yhat, feed_dict={X: self.trainX, Y: self.trainY, pkeep: 1})  # model prediction on the training set
+            nn_updates["yhat_train"] = sess.run(Yhat, feed_dict={X: self.trainX, Y: self.trainY, pkeep: 1})
             nn_updates["yhat_val"] = sess.run(Yhat, feed_dict={X: self.valX, Y: self.valY, pkeep: 1})
-            if (np.isnan(nn_updates["yhat_val"]).any()):
-                self.logger.warning("yhat_val has nan..")
-                nn_updates["status"] = "fail"
-                return nn_updates
             nn_updates["yhat_test"] = sess.run(Yhat, feed_dict={X: self.testX, Y: self.testY, pkeep: 1})
             nn_updates["W1"] = W1.eval()
             nn_updates["W2"] = W2.eval()
             if not (wts[3] is None):
                 nn_updates["W3"] = W3.eval()
-            nn_updates["loss"] = 1 - nn_updates["val_pcc"][-1]  # / np.sqrt(nn_updates["val_pcc"][-1] + 0.0001)
-            nn_updates["status"] = STATUS_OK
+
+            print("lamda:{}, layer_sizes:{}, loss:{}, status:{}, yhat_test:{}".format(
+                lamda, layer_sizes, nn_updates["loss"], nn_updates["status"], nn_updates["yhat_test"]))
+
         return nn_updates
 
     def tf_model(self, X, Y, W1, W2, W3, b1, g1, b2, g2, pkeep, lamda,
@@ -254,6 +259,12 @@ class Tensorflow_model(object):
 
     def get_log_into_to_save(self, trials, best_params):
         index = np.argmin(trials.losses())
+        for i, j in enumerate(zip(trials.losses(), trials.statuses())):
+            print(i, j)
+            print("best param index", index)
+            self.logger.info("{}: {}".format(i, j))
+            self.logger.info("Best param index: {}".format(index))
+
         yhat_train = trials.results[index]["yhat_train"].flatten()
         yhat_val = trials.results[index]["yhat_val"].flatten()
         yhat_test = trials.results[index]["yhat_test"].flatten()
@@ -266,10 +277,12 @@ class Tensorflow_model(object):
         med_train_pcc = trials.results[index]["train_pcc"][-1]
         med_val_pcc = trials.results[index]["val_pcc"][-1]
         med_test_pcc = "na"
-
-        med_train_scc = stats.spearmanr(self.trainY.flatten(), yhat_train)[0]
-        med_val_scc = stats.spearmanr(self.valY.flatten(), yhat_val)[0]
-        med_test_scc = "na"
+        try:
+            med_train_scc = stats.spearmanr(self.trainY.flatten(), yhat_train)[0]
+            med_val_scc = stats.spearmanr(self.valY.flatten(), yhat_val)[0]
+            med_test_scc = "na"
+        except:
+            pdb.set_trace()
 
         if (len(pc_test_error) > 2):
             med_test_pcc = np.corrcoef(self.testY.flatten(), yhat_test)[0, 1]
