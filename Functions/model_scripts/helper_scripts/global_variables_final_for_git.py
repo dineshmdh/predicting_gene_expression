@@ -95,7 +95,7 @@ class Global_Vars(object):
 
         self.roi = self.get_roi(self.goi)  # need self.goi to get gene tss loc from goi.index
         df_roi_dhss = self.get_df_dhss(self.roi, df_dhss)  # df_dhss overlapping self.roi
-        self.df_dhss = self.filter_ftsIn_multiIndexed_df_by_pcc(df_roi_dhss)
+        self.df_dhss = self.filter_ftsIn_multiIndexed_df_by_pcc_and_size(df_roi_dhss)
         if (self.use_random_DHSs):
             self.df_dhss = self.get_random_df_dhss_filtdBy_pcc_and_size(
                 df_dhss, max_dhs_num=self.df_dhss.shape[0])
