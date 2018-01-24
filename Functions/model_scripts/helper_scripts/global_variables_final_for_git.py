@@ -97,12 +97,14 @@ class Global_Vars(object):
 
         self.roi = self.get_roi(self.goi)  # need self.goi to get gene tss loc from goi.index
         df_roi_dhss = self.get_df_dhss(self.roi, df_dhss)  # df_dhss overlapping self.roi
+        self.logger.info("Total number of DHS sites originally: {}".format(df_roi_dhss.shape[0]))
         self.df_dhss = self.filter_ftsIn_multiIndexed_df_by_pcc_and_size(df_roi_dhss)
         if (self.use_random_DHSs):
             self.df_dhss = self.get_random_df_dhss_filtdBy_pcc_and_size(
                 df_dhss, max_dhs_num=self.df_dhss.shape[0])
 
         df_tfs = self.get_df_tfs(df_rnase, df_cnTfs)  # tf gexes are log-transformed before getting pccs
+        self.logger.info("Total number of TFs originally: {}".format(df_tfs.shape[0]))
         self.df_tfs = self.filter_tf_fts(df_tfs)
         if (self.use_random_TFs):
             self.df_tfs = self.get_random_df_tfs_filtdBy_pcc_and_size(
