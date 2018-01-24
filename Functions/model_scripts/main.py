@@ -136,7 +136,7 @@ for test_idx in range(0, 18):
                                 space=get_parameter_space_forHPO(tm.trainX),
                                 algo=tpe_method, max_evals=15)
 
-    to_log = tm.get_log_into_to_save(trials, best_params)
+    to_log = tm.get_log_into_to_save(trials, best_params, logger)
     logger.info(to_log)
 
     plot_title = re.split(";best_params", to_log)[0]
