@@ -1,7 +1,7 @@
 .DS_Store
 Functions/notes.py
 Functions/test.ipynb
-*.pyc
+Functions/model_scripts/python_*
 **/*.pyc
 Output/
 Input_files/

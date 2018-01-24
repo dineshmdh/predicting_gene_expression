@@ -24,5 +24,5 @@ rank = os.environ["SLURM_ARRAY_TASK_ID"]
 thisGene = genes[int(rank) - 1]
 outputDir = "/data/gordanlab/dinesh/predicting_gene_expression/Output/BCgenes"
 
-cmd_basic = "python main.py {} -o {} -k {} -tfl 6 -F 25".format(thisGene, outputDir, rank)
+cmd_basic = "python main.py {} -o {} -k {} -tfl 6 -F 25 -rd -rt".format(thisGene, outputDir, rank)
 os.system(cmd_basic)
