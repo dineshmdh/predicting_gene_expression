@@ -172,7 +172,7 @@ class Tensorflow_model(object):
             nn_updates["loss"] = 1 - nn_updates["val_pcc"][-1]  # / np.sqrt(nn_updates["val_pcc"][-1] + 0.0001)
             if (np.any(np.isnan(nn_updates["loss"]))):
                 pdb.set_trace()
-                nn_updates["loss"] = None  # https://github.com/hyperopt/hyperopt/pull/176
+                nn_updates["loss"] = np.inf  # https://github.com/hyperopt/hyperopt/pull/176
                 nn_updates["status"] = STATUS_FAIL
             else:
                 nn_updates["status"] = STATUS_OK
@@ -187,7 +187,7 @@ class Tensorflow_model(object):
                 nn_updates["W3"] = W3.eval()
 
             print("lamda:{}, layer_sizes:{}, loss:{}, status:{}, yhat_test:{}".format(
-                lamda, layer_sizes, nn_updates["loss"], nn_updates["status"], nn_updates["yhat_test"]))
+                lamda, layer_sizes, nn_updates["loss"], nn_updates["status"], nn_updates["yhat_test"].flatten()))
 
         return nn_updates
 
