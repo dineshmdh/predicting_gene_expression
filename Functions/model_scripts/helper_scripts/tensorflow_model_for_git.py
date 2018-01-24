@@ -8,6 +8,8 @@ import scipy.stats as stats
 import seaborn as sns
 from hyperopt import STATUS_OK
 import matplotlib.pyplot as plt
+
+np.seterr(all='raise')
 plt.switch_backend('agg')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # To ignore TF warning in stdout (source: https://github.com/tensorflow/tensorflow/issues/7778)
 
@@ -260,7 +262,6 @@ class Tensorflow_model(object):
         med_pc_val_error = np.median(self.get_percentage_error(self.valY.flatten(), yhat_val))
         pc_test_error = self.get_percentage_error(self.testY.flatten(), yhat_test)
         med_pc_test_error = np.median(pc_test_error)
-        pc_test_error = ",".join([str(x) for x in pc_test_error])
 
         med_train_pcc = trials.results[index]["train_pcc"][-1]
         med_val_pcc = trials.results[index]["val_pcc"][-1]
@@ -274,6 +275,7 @@ class Tensorflow_model(object):
             med_test_pcc = np.corrcoef(self.testY.flatten(), yhat_test)[0, 1]
             med_test_scc = stats.spearmanr(self.testY.flatten(), yhat_test)[0]
 
+        pc_test_error = ",".join([str(x) for x in pc_test_error])
         to_log = "test_group_{}:{};testX.shape:{};median_pc_error:{:.3f},{:.3f},{:.3f};PCC:{:.3f},{:.3f},{};SCC:{:.3f},{:.3f},{};best_params:{};test_pc_errors:{}".format(
             self.test_eid_group_index, self.test_eid_group, self.testX.shape,
             med_pc_train_error, med_pc_val_error, med_pc_test_error,  # median pc errors

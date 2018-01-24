@@ -125,7 +125,7 @@ gv = Global_Vars(args, outputDir)  # gene and condition specific outputDir
 mp = Model_preparation(gv)
 
 '''Run HPO on differen train/test splits'''
-for test_idx in range(7, 18):
+for test_idx in range(0, 18):
     if (test_idx == 4):  # 4 corresponds to val_group of "ENCODE2012"; 2 to brain; 6 to ESC
         continue
     # try:
@@ -134,7 +134,7 @@ for test_idx in range(7, 18):
 
     best_params = hyperopt.fmin(tm.train_tensorflow_nn, trials=trials,
                                 space=get_parameter_space_forHPO(tm.trainX),
-                                algo=tpe_method, max_evals=5)
+                                algo=tpe_method, max_evals=15)
 
     to_log = tm.get_log_into_to_save(trials, best_params)
     logger.info(to_log)

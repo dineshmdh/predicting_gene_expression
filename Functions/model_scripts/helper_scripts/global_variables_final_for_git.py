@@ -14,6 +14,8 @@ import pandas as pd
 from pybedtools import BedTool as bedtools
 # default bedtools column names: chrom, start, stop, name, score and strand.
 
+np.seterr(all='raise')
+
 pd.set_option('mode.chained_assignment', None)  # default='warn'; set to "None" to ignore warnings
 pd.options.display.max_rows = 100
 pd.options.display.max_columns = 20  # default is 20
