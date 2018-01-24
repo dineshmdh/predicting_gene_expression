@@ -18,7 +18,7 @@ def loguniform_int(name, lower, upper):
 
 tpe_method = partial(
     hyperopt.tpe.suggest,
-    n_EI_candidates=100,  # 30 # Sample __ candidate and select candidate that has highest Expected Improvement (EI)
+    n_EI_candidates=200,  # 30 # Sample __ candidate and select candidate that has highest Expected Improvement (EI)
     gamma=0.2,  # Use 20% of best observations to estimate next set of parameters
     n_startup_jobs=8,  # 10 # First __ trials are going to be random
 )
