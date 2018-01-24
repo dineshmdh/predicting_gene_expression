@@ -1,13 +1,15 @@
 import pdb
 import logging
+import re
 import os
 import tensorflow as tf
 import numpy as np
+import scipy.stats as stats
 import seaborn as sns
 from hyperopt import STATUS_OK
 import matplotlib.pyplot as plt
 plt.switch_backend('agg')
-np.seterr(divide='ignore', invalid='ignore')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # To ignore TF warning in stdout (source: https://github.com/tensorflow/tensorflow/issues/7778)
 
 
 class Tensorflow_model(object):
@@ -115,7 +117,7 @@ class Tensorflow_model(object):
         lamda = parameters['lamda']
         print("lamda:{}, layer_sizes:{}".format(lamda, layer_sizes))
         pkeep_train = 0.7
-        starter_learning_rate = 0.7
+        starter_learning_rate = 0.5
         decay_at_step = 15
         use_sigmoid_h1 = True
         use_sigmoid_h2 = True
@@ -248,9 +250,41 @@ class Tensorflow_model(object):
             pes.append(a / b)
         return pes
 
-    def plot_scatter_performance(self, trials, gv, index=None):
-        if (index is None):
-            index = np.argmin(trials.losses())  # trial with least error
+    def get_log_into_to_save(self, trials, best_params):
+        index = np.argmin(trials.losses())
+        yhat_train = trials.results[index]["yhat_train"].flatten()
+        yhat_val = trials.results[index]["yhat_val"].flatten()
+        yhat_test = trials.results[index]["yhat_test"].flatten()
+
+        med_pc_train_error = np.median(self.get_percentage_error(self.trainY.flatten(), yhat_train))
+        med_pc_val_error = np.median(self.get_percentage_error(self.valY.flatten(), yhat_val))
+        pc_test_error = self.get_percentage_error(self.testY.flatten(), yhat_test)
+        med_pc_test_error = np.median(pc_test_error)
+        pc_test_error = ",".join([str(x) for x in pc_test_error])
+
+        med_train_pcc = trials.results[index]["train_pcc"][-1]
+        med_val_pcc = trials.results[index]["val_pcc"][-1]
+        med_test_pcc = "na"
+
+        med_train_scc = stats.spearmanr(self.trainY.flatten(), yhat_train)[0]
+        med_val_scc = stats.spearmanr(self.valY.flatten(), yhat_val)[0]
+        med_test_scc = "na"
+
+        if (len(pc_test_error) > 2):
+            med_test_pcc = np.corrcoef(self.testY.flatten(), yhat_test)[0, 1]
+            med_test_scc = stats.spearmanr(self.testY.flatten(), yhat_test)[0]
+
+        to_log = "test_group_{}:{};testX.shape:{};median_pc_error:{:.3f},{:.3f},{:.3f};PCC:{:.3f},{:.3f},{};SCC:{:.3f},{:.3f},{};best_params:{};test_pc_errors:{}".format(
+            self.test_eid_group_index, self.test_eid_group, self.testX.shape,
+            med_pc_train_error, med_pc_val_error, med_pc_test_error,  # median pc errors
+            med_train_pcc, med_val_pcc, med_test_pcc if med_test_pcc == "na" else round(med_test_pcc, 3),  # all PCCs
+            med_train_scc, med_val_scc, med_test_scc if med_test_scc == "na" else round(med_test_scc, 3),  # all SCCs
+            re.sub("\s+", "", str(best_params)), pc_test_error
+        )
+        return to_log
+
+    def plot_scatter_performance(self, trials, gv, plot_title):
+        index = np.argmin(trials.losses())  # trial with least error
         plt.figure(figsize=(5, 5))
         sns.regplot(self.trainY.flatten(), trials.results[index]["yhat_train"].flatten(), robust=False, fit_reg=False, scatter_kws={'alpha': 0.45}, color="salmon")
         sns.regplot(self.valY.flatten(), trials.results[index]["yhat_val"].flatten(), robust=False, fit_reg=False, color="mediumvioletred")
@@ -260,14 +294,9 @@ class Tensorflow_model(object):
         plt.plot([[0, 0], [1, 1]], "--")
         plt.xlabel("Real RPKM signal normalized")
         plt.ylabel("Predicted RPKM signal")
-        med_pc_test_error = np.median(self.get_percentage_error(self.testY, trials.results[index]["yhat_test"].flatten()))
-        med_pc_val_error = np.median(self.get_percentage_error(self.valY, trials.results[index]["yhat_val"].flatten()))
-        val_pcc = trials.results[index]["val_pcc"][-1]
-        plt.title("{}, Test Group:{},\nMedian (val, test) % error: ({:.3f}, {:.3f}), Val PCC:{:.3f}".format(gv.gene_ofInterest, self.test_eid_group, med_pc_val_error, med_pc_test_error, val_pcc))
-
+        plt.title(plot_title)
         fig_name = "{}_perf_on_{}.pdf".format(gv.gene_ofInterest, self.test_eid_group)
         plt.savefig(os.path.join(gv.outputDir, fig_name))
-        return med_pc_test_error, med_pc_val_error
 
 
 if __name__ == "__main__":

@@ -10,13 +10,13 @@ Notes:
 
 
 '''
+import logging
 import pdb
+import re
 import time
 import os  # os is being used to set up default outputDir
 import argparse
 import sys
-import numpy as np
-
 import hyperopt
 from hyperopt import fmin
 
@@ -24,7 +24,6 @@ start_time = time.time()
 sys.path = sys.path[1:]
 sys.path.insert(0, os.path.join(os.getcwd(), "helper_scripts"))
 
-import logging
 from global_variables_final_for_git import Global_Vars
 from prep_for_model_for_git import Model_preparation
 from tensorflow_model_for_git import Tensorflow_model
@@ -114,7 +113,7 @@ logger.addHandler(stream_handler)
 logger.info("Command line arguments: {}".format(args))
 
 if (args.use_random_TFs):
-    logger.info("Note: only those TFs with PCC >= 0.3 with this gene are selected (at random).")
+    logger.info("Note: only those TFs with PCC >= 0.1 with this gene are selected (at random).")
 
 
 ############################################################
@@ -126,27 +125,27 @@ gv = Global_Vars(args, outputDir)  # gene and condition specific outputDir
 mp = Model_preparation(gv)
 
 '''Run HPO on differen train/test splits'''
-for test_idx in range(6, 7):
-    if (test_idx == 4):  # 4 corresponds to val_group of "ENCODE2012"; 3 to brain; 6 to ESC
+for test_idx in range(7, 18):
+    if (test_idx == 4):  # 4 corresponds to val_group of "ENCODE2012"; 2 to brain; 6 to ESC
         continue
-    try:
-        tm = Tensorflow_model(gv, mp, test_eid_group_index=test_idx)
-        trials = hyperopt.Trials()
+    # try:
+    tm = Tensorflow_model(gv, mp, test_eid_group_index=test_idx)
+    trials = hyperopt.Trials()
 
-        best_params = hyperopt.fmin(tm.train_tensorflow_nn, trials=trials,
-                                    space=get_parameter_space_forHPO(tm.trainX), algo=tpe_method, max_evals=10)
+    best_params = hyperopt.fmin(tm.train_tensorflow_nn, trials=trials,
+                                space=get_parameter_space_forHPO(tm.trainX),
+                                algo=tpe_method, max_evals=5)
 
-        med_pc_test_error, med_pc_val_error = tm.plot_scatter_performance(trials, gv, index=None)
-        med_val_pcc = trials.results[np.argmin(trials.losses())]["val_pcc"][-1]
-        logger.info("trainX.shape:{}, testX.shape:{}".format(tm.trainX.shape, tm.testX.shape))
-        logger.info("Test Group {}: {}, Median Test pc Error: {}, Median Val (pc error, pcc): ({},{}) Best Params: {}".format(
-            tm.test_eid_group_index, tm.test_eid_group,
-            round(med_pc_test_error, 3),
-            round(med_pc_val_error, 3), round(med_val_pcc, 3),
-            best_params))
+    to_log = tm.get_log_into_to_save(trials, best_params)
+    logger.info(to_log)
 
-        del tm, trials, best_params
-    except:
-        logger.warning("Test group index {} did not run to completion..")
+    plot_title = re.split(";best_params", to_log)[0]
+    plot_title = re.split(";median_pc_error|;PCC", plot_title)
+    plot_title = plot_title[0] + "\nmed_pc_err" + plot_title[1] + "\nPCC" + plot_title[2]
+    tm.plot_scatter_performance(trials, gv, gv.gene_ofInterest + ";" + plot_title)
+
+    del tm, trials, best_params
+    # except:
+    #    logger.warning("Test group index {} did not run to completion..")
 
 logger.info("Total time taken: {}".format(time.time() - start_time))
