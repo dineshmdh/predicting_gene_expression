@@ -1,5 +1,6 @@
 .DS_Store
 Functions/notes.py
+Functions/test.ipynb
 *.pyc
 **/*.pyc
 Output/
