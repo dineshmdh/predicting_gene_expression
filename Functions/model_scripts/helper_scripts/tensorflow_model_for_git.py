@@ -171,7 +171,6 @@ class Tensorflow_model(object):
             ########## Now predict the performance, and update the output dict ########
             nn_updates["loss"] = 1 - nn_updates["val_pcc"][-1]  # / np.sqrt(nn_updates["val_pcc"][-1] + 0.0001)
             if (np.any(np.isnan(nn_updates["loss"]))):
-                pdb.set_trace()
                 nn_updates["loss"] = np.inf  # https://github.com/hyperopt/hyperopt/pull/176
                 nn_updates["status"] = STATUS_FAIL
             else:
@@ -257,13 +256,15 @@ class Tensorflow_model(object):
             pes.append(a / b)
         return pes
 
-    def get_log_into_to_save(self, trials, best_params):
+    def get_log_into_to_save(self, trials, best_params, logger):
+        ''' logger is an argument because self.logger prints multiple
+        (identical) line outputs.'''
         index = np.argmin(trials.losses())
         for i, j in enumerate(zip(trials.losses(), trials.statuses())):
             print(i, j)
-            print("best param index", index)
-            self.logger.info("{}: {}".format(i, j))
-            self.logger.info("Best param index: {}".format(index))
+            logger.info("{}: {}".format(i, j))
+        print("best param index", index)
+        logger.info("Best param index: {}".format(index))
 
         yhat_train = trials.results[index]["yhat_train"].flatten()
         yhat_val = trials.results[index]["yhat_val"].flatten()
