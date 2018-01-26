@@ -13,9 +13,11 @@ import numpy as np
 import pandas as pd
 from pybedtools import BedTool as bedtools
 # default bedtools column names: chrom, start, stop, name, score and strand.
+import seaborn as sns
+import matplotlib.pyplot as plt
 
+plt.switch_backend('agg')
 np.seterr(all='raise')
-
 pd.set_option('mode.chained_assignment', None)  # default='warn'; set to "None" to ignore warnings
 pd.options.display.max_rows = 100
 pd.options.display.max_columns = 20  # default is 20
@@ -64,16 +66,18 @@ class Global_Vars(object):
         self.filter_tfs_by = args.filter_tfs_by
         self.lowerlimit_to_filter_tfs = args.lowerlimit_to_filter_tfs
         if (self.filter_tfs_by == "zscore"):
-            self.pcc_lowerlimit_to_filter_tfs = 0.1
+            self.pcc_lowerlimit_to_filter_tfs = 0.2  # only applied when selecting real features
         else:
             self.pcc_lowerlimit_to_filter_tfs = self.lowerlimit_to_filter_tfs
-        self.take_this_many_top_fts = args.take_this_many_top_fts  # all dhss/tfs will already be filtered by pcc(or zscore)
+        self.take_this_many_top_dhss = args.take_this_many_top_dhss
+        self.take_this_many_top_tfs = args.take_this_many_top_tfs
         self.init_wts_type = args.init_wts_type
         self.inputDir = os.path.abspath("../../Input_files")
         self.outputDir = new_out_dir
         self.use_random_DHSs = args.use_random_DHSs
         self.use_random_TFs = args.use_random_TFs
 
+        self.see_pccs_for_rndFts = False  # if True, PCCs for random features are plotted
         ####### other variables specific to NN #######
         self.max_iter = args.max_iter
 
@@ -98,16 +102,17 @@ class Global_Vars(object):
         self.roi = self.get_roi(self.goi)  # need self.goi to get gene tss loc from goi.index
         df_roi_dhss = self.get_df_dhss(self.roi, df_dhss)  # df_dhss overlapping self.roi
         self.logger.info("Total number of DHS sites originally: {}".format(df_roi_dhss.shape[0]))
-        self.df_dhss = self.filter_ftsIn_multiIndexed_df_by_pcc_and_size(df_roi_dhss)
+        self.df_dhss = self.filter_ftsIn_multiIndexed_df_by_pcc_and_size(df_roi_dhss, is_df_dhss=True)
         if (self.use_random_DHSs):
             self.df_dhss = self.get_random_df_dhss_filtdBy_pcc_and_size(
                 df_dhss, max_dhs_num=self.df_dhss.shape[0])
+        self.df_dhss = np.log2(self.df_dhss + 1)  # v
 
         df_tfs = self.get_df_tfs(df_rnase, df_cnTfs)  # tf gexes are log-transformed before getting pccs
         self.logger.info("Total number of TFs originally: {}".format(df_tfs.shape[0]))
         self.df_tfs = self.filter_tf_fts(df_tfs)
         if (self.use_random_TFs):
-            self.df_tfs = self.get_random_df_tfs_filtdBy_pcc_and_size(
+            self.df_tfs = self.get_random_df_tfs_filtdBy_size(
                 df_cnTfs, df_rnase, max_tfs_num=self.df_tfs.shape[0])
 
         self.logger.info("Done. Setting up the training and testing split..")
@@ -169,7 +174,10 @@ class Global_Vars(object):
         '''Add PCC(dhs, goi) to the index'''
         pccs = []
         for ix in range(0, df_roi_dhss.shape[0]):
-            pccs.append(np.corrcoef(df_roi_dhss.iloc[ix], self.goi)[0, 1])
+            pcc = np.corrcoef(df_roi_dhss.iloc[ix], self.goi)[0, 1]
+            # mi = mutual_information_2d(df_roi_dhss.iloc[ix].ravel(), self.goi.ravel(), sigma=0.01)
+            pccs.append(pcc)
+
         df_roi_dhss["pcc"] = pccs
         df_roi_dhss = df_roi_dhss.set_index("pcc", append=True)
 
@@ -177,15 +185,19 @@ class Global_Vars(object):
 
     '''Filter a multilevel indexed df by its pcc index value in 2 steps:
     1. By abs_pcc: ignore fts with low pcc.
-    2. By take_this_many_top_fts: only fts with topmost pccs selected.'''
+    2. By take_this_many_top_[dhss/tfs]: only fts with topmost pccs selected.'''
 
-    def filter_ftsIn_multiIndexed_df_by_pcc_and_size(self, df):
+    def filter_ftsIn_multiIndexed_df_by_pcc_and_size(self, df, is_df_dhss):
         df["abs_pcc"] = abs(df.index.get_level_values("pcc"))
         df = df.sort_values(by=["abs_pcc"], ascending=False)
         df = df[df["abs_pcc"] >= self.pcc_lowerlimit_to_filter_dhss]  # filter by abs_pcc
         df = df.drop(labels=["abs_pcc"], axis=1)
-        if (df.shape[0] > self.take_this_many_top_fts > 0):
-            df = df[:self.take_this_many_top_fts]  # this df is sorted by abs_pcc (4 steps back)
+        if (is_df_dhss):
+            if (df.shape[0] > self.take_this_many_top_dhss > 0):
+                df = df[:self.take_this_many_top_dhss]  # this df is sorted by abs_pcc (4 steps back)
+        else:
+            if (df.shape[0] > self.take_this_many_top_tfs > 0):
+                df = df[:self.take_this_many_top_tfs]  # this df is sorted by abs_pcc (4 steps back)
         return df
 
     '''Get df_tfs. The csv_cn_tfs file is read fast.'''
@@ -203,11 +215,12 @@ class Global_Vars(object):
         '''df_tfs has "geneName", "loc", "TAD_loc", "zscore", "cn_corr" and "pcc" as index.
         The cols are gexes in samples / cell types. The TFs (i.e. "geneName") are filtered
         by self.filter_tfs_by argument (i.e. "zscore" or "pearson_corr") threshold and
-        subsequently by self.take_this_many_top_fts on the same argument.
+        subsequently by self.take_this_many_top_tfs on the same argument.
         '''
         df_cnTfs = self.get_df_cn_tfs(df_cnTfs)  # has zscores and cn_corr as cols, and "geneName" (i.e. TFs) as indices
         df_tfs = df_rnase.iloc[df_rnase.index.get_level_values("geneName").isin(df_cnTfs.index)]
-        if (self.take_log2_tpm):
+
+        if (self.take_log2_tpm):  # taking log before computing pcc
             df_tfs = np.log2(df_tfs + 1)
 
         '''First get the pcc values. Then merge the zscores and corr cols df and the pccs'''
@@ -225,60 +238,60 @@ class Global_Vars(object):
     '''Filter by zcore/pcc lower limit first, then filter again to get only top fts'''
 
     def filter_tf_fts(self, df_tfs):
+        df_tfs = df_tfs[abs(df_tfs.index.get_level_values("pcc")) >= 0.2]
         if (self.filter_tfs_by == "zscore"):  # zscores are all positive; sorting and filtering is not complicated.
             df_tfs = df_tfs[df_tfs.index.get_level_values("zscore") >= self.lowerlimit_to_filter_tfs]
-            if (df_tfs.shape[0] > self.take_this_many_top_fts > 0):  # self.take_this_many_top_fts is set to -1 if all fts are to be used
-                df_tfs = df_tfs.sort_index(axis=0, level="zscore", ascending=False)[:self.take_this_many_top_fts]
+            if (df_tfs.shape[0] > self.take_this_many_top_tfs > 0):  # self.take_this_many_top_tfs is set to -1 if all fts are to be used
+                df_tfs = df_tfs.sort_index(axis=0, level="zscore", ascending=False)[:self.take_this_many_top_tfs]
         else:
-            df_tfs = self.filter_ftsIn_multiIndexed_df_by_pcc_and_size(df_tfs)
+            df_tfs = self.filter_ftsIn_multiIndexed_df_by_pcc_and_size(df_tfs, is_df_dhss=False)
         return df_tfs
 
-    '''Return a random df of dhss filtered only by the self.pcc_lowerlimit_to_filter_dhss argument.
-    This will be used later to further randomly select dhss using the argument self.take_this_many_top_fts.
-    '''
+    '''Return a random df_dhss filtered by the size of the dhss df to get - max_dhs_num,
+    which is the number of real dhss being considered. PCC computed to add as an index in the
+    output dataframe.'''
 
-    def get_random_df_dhss_filtdBy_pcc(self, df_dhss, starting_num_dhss=1000):
-        rand_ints = sorted(random.sample(range(0, df_dhss.shape[0]), starting_num_dhss))
+    def get_random_df_dhss_filtdBy_pcc_and_size(self, df_dhss, max_dhs_num):
+        # Note that self.goi has been log-transformed
+
+        rand_ints = sorted(random.sample(range(0, df_dhss.shape[0]), max_dhs_num))
         df_random = df_dhss.iloc[rand_ints, :]
 
         pccs = []
         for ix in range(0, df_random.shape[0]):
             pccs.append(np.corrcoef(df_random.iloc[ix], self.goi)[0, 1])
 
-        df_random["pcc"] = pccs
-        df_random["abs_pcc"] = [abs(x) for x in pccs]
-        df_random = df_random.sort_values(by=["abs_pcc"], ascending=False)
-        df_random = df_random[df_random["abs_pcc"] >= self.pcc_lowerlimit_to_filter_dhss]  # filter by abs_pcc
+        df_random["pcc"] = pccs  # "abs_pcc" field not required since DHSs are not being filtered by pcc
+
+        if (self.see_pccs_for_rndFts):
+            # plotted for a random collection of 1000 DHS sites
+            rand_ints_ = sorted(random.sample(range(0, df_dhss.shape[0]), 1000))
+            df_ = df_dhss.iloc[rand_ints_, :]
+
+            pccs_1000dhss = []
+            for ix in range(0, df_.shape[0]):
+                pccs_1000dhss.append(np.corrcoef(df_.iloc[ix], self.goi)[0, 1])
+
+            sns.kdeplot(np.array(pccs_1000dhss), color="red", label="PCCs for {} random DHS sites".format(len(pccs_1000dhss)))  # should be 1000
+            sns.kdeplot(np.array(df_random["pcc"].tolist()), color="blue", label="PCCs for randomly selected DHS sites (n={})".format(df_random.shape[0]))
+            plt.xlabel("PCCs")
+            plt.ylabel("Density")
+            plt.savefig(self.outputDir + "/pccs_for_random_dhss_selection.pdf")
 
         return df_random
 
-    '''Return a random df_dhss filtered by both self.pcc_lowerlimit_to_filter_dhss and
-    the size of the dhss df to get. The size is the max_dhs_num, which
-    is the number of real dhss being considered. Note that this already is the minimum
-    total DHS sites in ROI and self.take_this_many_dhss_fts argument.'''
+    '''Function similar to self.get_random_df_dhss_filtdBy_size() above, but for TFs.
+    max_tfs_num is the size of the real number of TFs being considered. TFs are not selected
+    by PCCs, but PCCs are added to match the indexing style for when real TFs are used'''
 
-    def get_random_df_dhss_filtdBy_pcc_and_size(self, df_dhss, max_dhs_num):
-        # Note that self.goi is not yet log-transformed
-        df_random = self.get_random_df_dhss_filtdBy_pcc(df_dhss, starting_num_dhss=1000)
-        while (df_random.shape[0] < max_dhs_num):  # which is highly unlikely (given starting_num_dhss is set high)
-            df_random = pd.concat([df_random, self.get_random_df_dhss_filtdBy_pcc(df_dhss, starting_num_dhss=500)], axis=0)
-            df_random = df_random.drop_duplicates()
-
-        rand_ints = sorted(random.sample(range(0, df_random.shape[0]), max_dhs_num))
-        df_random = df_random.iloc[rand_ints, :]
-        df_random = df_random.drop(["abs_pcc"], axis=1)
-        df_random = df_random.set_index("pcc", append=True)
-        return df_random
-
-    '''Function similar to self.get_random_df_dhss_filtdBy_pcc_and_size() above, but for TFs.
-    max_tfs_num is the size of the real number of TFs being considered. Also, note that
-    only those random TFs that pass the self.pcc_lowerlimit_to_filter_tfs threshold are selected.'''
-
-    def get_random_df_tfs_filtdBy_pcc_and_size(self, df_cnTfs, df_rnase, max_tfs_num):
-        # Note that self.goi is not yet log-transformed
+    def get_random_df_tfs_filtdBy_size(self, df_cnTfs, df_rnase, max_tfs_num):
+        # Note that self.goi has been log-transformed
 
         all_tfs = list(set(df_cnTfs["TF"]))
         df_random = df_rnase[df_rnase.index.get_level_values("geneName").isin(all_tfs)]
+
+        if (self.take_log2_tpm):  # log transform before taking the pcc
+            df_random = np.log2(df_random + 1)
 
         pccs = []
         for ix in range(0, df_random.shape[0]):
@@ -286,9 +299,16 @@ class Global_Vars(object):
 
         df_random["pcc"] = pccs
         df_random["abs_pcc"] = [abs(x) for x in pccs]
-        df_random = df_random[df_random["abs_pcc"] >= self.pcc_lowerlimit_to_filter_tfs]
         rand_ints = sorted(random.sample(range(0, df_random.shape[0]), max_tfs_num))
         df_random = df_random.iloc[rand_ints, :]
+
+        if (self.see_pccs_for_rndFts):
+            sns.kdeplot(np.array(pccs), color="red", label="PCCs for all fts")
+            sns.kdeplot(np.array(df_random["pcc"].tolist()), color="blue", label="PCCs for randomly selected fts")
+            plt.xlabel("PCCs")
+            plt.ylabel("Density")
+            plt.savefig(self.outputDir + "/pccs_for_random_tf_selection.pdf")
+
         df_random = df_random.drop(["abs_pcc"], axis=1)
         df_random = df_random.set_index("pcc", append=True)
         return df_random
