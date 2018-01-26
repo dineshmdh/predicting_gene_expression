@@ -106,12 +106,12 @@ class Global_Vars(object):
 
         self.roi = self.get_roi(self.goi)  # need self.goi to get gene tss loc from goi.index
         df_roi_dhss = self.get_df_dhss(self.roi, df_dhss)  # df_dhss overlapping self.roi
-        df_roi_dhss = np.log2(df_roi_dhss + 1)  # log transformed before pcc based filtering
+        df_roi_dhss = np.log2(df_roi_dhss + 1)  # log transforming before pcc based filtering
         self.logger.info("Total number of DHS sites originally: {}".format(df_roi_dhss.shape[0]))
-        self.df_dhss = self.filter_ftsIn_multiIndexed_df_by_pcc_and_size(df_roi_dhss, is_df_dhss=True)  # not log transformed
+        self.df_dhss = self.filter_ftsIn_multiIndexed_df_by_pcc_and_size(df_roi_dhss, is_df_dhss=True)  # not log transformed in this
         if (self.use_random_DHSs):
-            self.df_dhss = self.get_random_df_dhss_filtdBy_size(  # log transformation is done before computing pcc
-                df_dhss, max_dhs_num=self.df_dhss.shape[0])
+            self.df_dhss = self.get_random_df_dhss_filtdBy_size(df_dhss, max_dhs_num=self.df_dhss.shape[0])  # log transformation is done before computing pcc
+        pdb.set_trace()
 
         df_tfs = self.get_df_tfs(df_rnase, df_cnTfs)  # in this function, tf gexes are log-transformed before getting pccs
         self.logger.info("Total number of TFs originally: {}".format(df_tfs.shape[0]))
@@ -257,7 +257,7 @@ class Global_Vars(object):
 
     def get_random_df_dhss_filtdBy_size(self, df_dhss, max_dhs_num):
         # Note that self.goi has been log-transformed
-
+        pdb.set_trace()
         rand_ints = sorted(random.sample(range(0, df_dhss.shape[0]), max_dhs_num))
         df_random = df_dhss.iloc[rand_ints, :]
 
@@ -268,6 +268,7 @@ class Global_Vars(object):
             pccs.append(np.corrcoef(df_random.iloc[ix], self.goi)[0, 1])
 
         df_random["pcc"] = pccs  # "abs_pcc" field not required since DHSs are not being filtered by pcc
+        df_random = df_random.set_index("pcc", append=True)
 
         if (self.see_pccs_for_rndFts):
             # plotted for a random collection of 1000 DHS sites
@@ -280,7 +281,7 @@ class Global_Vars(object):
 
             sns.kdeplot(np.array(pccs_1000dhss), color="red", label="PCCs for {} random DHS sites".format(len(pccs_1000dhss)))  # should be 1000
             # plt.hist(np.array(df_random["pcc"].tolist()), color="blue", label="PCCs for randomly selected DHS sites (n={})".format(df_random.shape[0]), alpha=0.3)
-            sns.rugplot(np.array(df_random["pcc"].tolist()), label="PCCs for randomly selected DHS sites (n={})".format(df_random.shape[0]))
+            sns.rugplot(np.array(pccs), label="PCCs for randomly selected DHS sites (n={})".format(df_random.shape[0]))
             plt.xlabel("PCCs")
             plt.ylabel("Density")
             plt.savefig(self.outputDir + "/pccs_for_random_dhss_selection.pdf")
