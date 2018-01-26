@@ -62,7 +62,6 @@ class Global_Vars(object):
         self.dist_lim = args.distance  # in kb
         self.use_tad_info = args.use_tad_info
         self.pcc_lowerlimit_to_filter_dhss = args.pcc_lowerlimit_to_filter_dhss
-        self.take_log2_tpm = args.take_log2_tpm
         self.filter_tfs_by = args.filter_tfs_by
         self.lowerlimit_to_filter_tfs = args.lowerlimit_to_filter_tfs
         if (self.filter_tfs_by == "zscore"):
@@ -96,8 +95,7 @@ class Global_Vars(object):
         ###### Get the goi, roi, df_roi_dhss and df_tfs objects (See description above __init__().) ######
 
         self.goi = self.get_gene_ofInterest_info(df_rnase)
-        if (self.take_log2_tpm):
-            self.goi = np.log2(self.goi + 1)
+        self.goi = np.log2(self.goi + 1)
 
         self.roi = self.get_roi(self.goi)  # need self.goi to get gene tss loc from goi.index
         df_roi_dhss = self.get_df_dhss(self.roi, df_dhss)  # df_dhss overlapping self.roi
@@ -106,9 +104,9 @@ class Global_Vars(object):
         if (self.use_random_DHSs):
             self.df_dhss = self.get_random_df_dhss_filtdBy_size(
                 df_dhss, max_dhs_num=self.df_dhss.shape[0])
-        self.df_dhss = np.log2(self.df_dhss + 1)  # v
+        self.df_dhss = np.log2(self.df_dhss + 1)  # log transformed before normalization
 
-        df_tfs = self.get_df_tfs(df_rnase, df_cnTfs)  # tf gexes are log-transformed before getting pccs
+        df_tfs = self.get_df_tfs(df_rnase, df_cnTfs)  # in this function, tf gexes are log-transformed before getting pccs
         self.logger.info("Total number of TFs originally: {}".format(df_tfs.shape[0]))
         self.df_tfs = self.filter_tf_fts(df_tfs)
         if (self.use_random_TFs):
@@ -123,7 +121,7 @@ class Global_Vars(object):
     def get_gene_ofInterest_info(self, df_rnase):
         '''Note: The output "self.gene_ofInterest_info.name" is a tuple of form:
         (geneName, loc, tad_loc). The output will be abbreviated as "goi" hence-forth.
-        The gex values are logged if self.take_log2_tpm == True.'''
+        The gex values are logged in the __init__() after running this function.'''
         df_gene_ofInterest = df_rnase.iloc[df_rnase.index.get_level_values("geneName") == self.gene_ofInterest]
         if (df_gene_ofInterest.shape[0] == 0):
             self.logger.error("The gene name is not found. Double check the name.")
@@ -220,8 +218,7 @@ class Global_Vars(object):
         df_cnTfs = self.get_df_cn_tfs(df_cnTfs)  # has zscores and cn_corr as cols, and "geneName" (i.e. TFs) as indices
         df_tfs = df_rnase.iloc[df_rnase.index.get_level_values("geneName").isin(df_cnTfs.index)]
 
-        if (self.take_log2_tpm):  # taking log before computing pcc
-            df_tfs = np.log2(df_tfs + 1)
+        df_tfs = np.log2(df_tfs + 1)  # taking log before computing pcc
 
         '''First get the pcc values. Then merge the zscores and corr cols df and the pccs'''
         pccs = []
@@ -290,8 +287,7 @@ class Global_Vars(object):
         all_tfs = list(set(df_cnTfs["TF"]))
         df_random = df_rnase[df_rnase.index.get_level_values("geneName").isin(all_tfs)]
 
-        if (self.take_log2_tpm):  # log transform before taking the pcc
-            df_random = np.log2(df_random + 1)
+        df_random = np.log2(df_random + 1)  # log transform before taking the pcc
 
         pccs = []
         for ix in range(0, df_random.shape[0]):
@@ -312,24 +308,3 @@ class Global_Vars(object):
         df_random = df_random.drop(["abs_pcc"], axis=1)
         df_random = df_random.set_index("pcc", append=True)
         return df_random
-
-
-if __name__ == "__main__":
-    class Args(object):
-        def __init__(self):
-            self.gene = "PRDM2"
-            self.distance = 150
-            self.use_tad_info = True
-            self.pcc_lowerlimit_to_filter_dhss = 0.1
-            self.take_log2_tpm = True
-            self.filter_tfs_by = "zscore"  # or "pcc"
-            self.lowerlimit_to_filter_tfs = 5.0
-            self.take_this_many_top_fts = 15  # all dhss/tfs will already be filtered by pcc(or zscore)
-            self.init_wts_type = "corr"
-            self.outputDir = "/Users/Dinesh/Dropbox/Github/predicting_gex_with_nn_git/Output"
-            self.use_random_DHSs = False
-            self.use_random_TFs = False
-            self.max_iter = 300
-
-    args = Args()
-    gv = Global_Vars(args, args.outputDir)
