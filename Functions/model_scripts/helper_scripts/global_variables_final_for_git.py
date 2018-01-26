@@ -104,7 +104,7 @@ class Global_Vars(object):
         self.logger.info("Total number of DHS sites originally: {}".format(df_roi_dhss.shape[0]))
         self.df_dhss = self.filter_ftsIn_multiIndexed_df_by_pcc_and_size(df_roi_dhss, is_df_dhss=True)
         if (self.use_random_DHSs):
-            self.df_dhss = self.get_random_df_dhss_filtdBy_pcc_and_size(
+            self.df_dhss = self.get_random_df_dhss_filtdBy_size(
                 df_dhss, max_dhs_num=self.df_dhss.shape[0])
         self.df_dhss = np.log2(self.df_dhss + 1)  # v
 
@@ -251,7 +251,7 @@ class Global_Vars(object):
     which is the number of real dhss being considered. PCC computed to add as an index in the
     output dataframe.'''
 
-    def get_random_df_dhss_filtdBy_pcc_and_size(self, df_dhss, max_dhs_num):
+    def get_random_df_dhss_filtdBy_size(self, df_dhss, max_dhs_num):
         # Note that self.goi has been log-transformed
 
         rand_ints = sorted(random.sample(range(0, df_dhss.shape[0]), max_dhs_num))
