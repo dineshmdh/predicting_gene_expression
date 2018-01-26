@@ -317,10 +317,21 @@ class Tensorflow_model(object):
         plt.xlim((0, 1.1))
         plt.ylim((0, 1.1))
         plt.plot([[0, 0], [1, 1]], "--")
-        plt.xlabel("Real RPKM signal normalized")
+
+        xlabel_suffix = "using"
+        if (gv.use_random_DHSs):
+            xlabel_suffix += " random DHSs"
+        else:
+            xlabel_suffix += " real DHSs"
+        if (gv.use_random_TFs):
+            xlabel_suffix += " and random TFs"
+        else:
+            xlabel_suffix += " and real TFs"
+        plt.xlabel("Real RPKM signal normalized - after init training\n{}".format(xlabel_suffix))
+
         plt.ylabel("Predicted RPKM signal")
         plt.title(plot_title)
-        fig_name = "{}_perf_on_{}.pdf".format(gv.gene_ofInterest, self.test_eid_group)
+        fig_name = "{}_perf_on_{}_after_init_training.pdf".format(gv.gene_ofInterest, self.test_eid_group)
         plt.savefig(os.path.join(gv.outputDir, fig_name))
         plt.close()
 
@@ -433,7 +444,16 @@ class Tensorflow_model(object):
         plt.xlim((0, 1.1))
         plt.ylim((0, 1.1))
         plt.plot([[0, 0], [1, 1]], "--")
-        plt.xlabel("Real RPKM signal normalized - after retraining")
+        xlabel_suffix = "using"
+        if (gv.use_random_DHSs):
+            xlabel_suffix += " random DHSs"
+        else:
+            xlabel_suffix += " real DHSs"
+        if (gv.use_random_TFs):
+            xlabel_suffix += " and random TFs"
+        else:
+            xlabel_suffix += " and real TFs"
+        plt.xlabel("Real RPKM signal normalized - after retraining\n{}".format(xlabel_suffix))
         plt.ylabel("Predicted RPKM signal")
         pc_test_errors = self.get_percentage_error(real_yhat=self.testY, predicted_yhat=updates["yhat_test"].flatten())
         plt.title("{}\nmed_test_pc_error:{:.3f};test_pcc:{:.3f}".format(title_prefix, np.median(pc_test_errors), updates["test_pcc"][-1]))
