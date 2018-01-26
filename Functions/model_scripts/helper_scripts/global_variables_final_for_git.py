@@ -34,6 +34,13 @@ class Global_Vars(object):
 
     To do:
     - add known enhancers to the df (also add "has_known enhancers" col).
+
+
+    Note about when the dfs are log-transformed.
+    1. Except for random df and dhss, all other dfs / series, namely self.df_dhss, self.df_tfs
+    and self.goi are log-transformed in the __init_() function.
+    2. For all, log transformation is done to suit preparation for computing pcc.
+    So, for all log-transformation precedes pcc computation by one or at most two steps.
     '''
 
     def __init__(self, args, new_out_dir):
@@ -76,7 +83,7 @@ class Global_Vars(object):
         self.use_random_DHSs = args.use_random_DHSs
         self.use_random_TFs = args.use_random_TFs
 
-        self.see_pccs_for_rndFts = False  # if True, PCCs for random features are plotted
+        self.see_pccs_for_rndFts = args.plot_all  # if True, PCCs for random features are plotted
         ####### other variables specific to NN #######
         self.max_iter = args.max_iter
 
@@ -95,22 +102,22 @@ class Global_Vars(object):
         ###### Get the goi, roi, df_roi_dhss and df_tfs objects (See description above __init__().) ######
 
         self.goi = self.get_gene_ofInterest_info(df_rnase)
-        self.goi = np.log2(self.goi + 1)
+        self.goi = np.log2(self.goi + 1)  # see Notes above about log-transformation
 
         self.roi = self.get_roi(self.goi)  # need self.goi to get gene tss loc from goi.index
         df_roi_dhss = self.get_df_dhss(self.roi, df_dhss)  # df_dhss overlapping self.roi
+        df_roi_dhss = np.log2(df_roi_dhss + 1)  # log transformed before pcc based filtering
         self.logger.info("Total number of DHS sites originally: {}".format(df_roi_dhss.shape[0]))
-        self.df_dhss = self.filter_ftsIn_multiIndexed_df_by_pcc_and_size(df_roi_dhss, is_df_dhss=True)
+        self.df_dhss = self.filter_ftsIn_multiIndexed_df_by_pcc_and_size(df_roi_dhss, is_df_dhss=True)  # not log transformed
         if (self.use_random_DHSs):
-            self.df_dhss = self.get_random_df_dhss_filtdBy_size(
+            self.df_dhss = self.get_random_df_dhss_filtdBy_size(  # log transformation is done before computing pcc
                 df_dhss, max_dhs_num=self.df_dhss.shape[0])
-        self.df_dhss = np.log2(self.df_dhss + 1)  # log transformed before normalization
 
         df_tfs = self.get_df_tfs(df_rnase, df_cnTfs)  # in this function, tf gexes are log-transformed before getting pccs
         self.logger.info("Total number of TFs originally: {}".format(df_tfs.shape[0]))
-        self.df_tfs = self.filter_tf_fts(df_tfs)
+        self.df_tfs = self.filter_tf_fts(df_tfs)  # not log transformed
         if (self.use_random_TFs):
-            self.df_tfs = self.get_random_df_tfs_filtdBy_size(
+            self.df_tfs = self.get_random_df_tfs_filtdBy_size(  # log transformation is done before computing pcc
                 df_cnTfs, df_rnase, max_tfs_num=self.df_tfs.shape[0])
 
         self.logger.info("Done. Setting up the training and testing split..")
@@ -241,7 +248,7 @@ class Global_Vars(object):
             if (df_tfs.shape[0] > self.take_this_many_top_tfs > 0):  # self.take_this_many_top_tfs is set to -1 if all fts are to be used
                 df_tfs = df_tfs.sort_index(axis=0, level="zscore", ascending=False)[:self.take_this_many_top_tfs]
         else:
-            df_tfs = self.filter_ftsIn_multiIndexed_df_by_pcc_and_size(df_tfs, is_df_dhss=False)
+            df_tfs = self.filter_ftsIn_multiIndexed_df_by_pcc_and_size(df_tfs, is_df_dhss=False)  # not log-transformed
         return df_tfs
 
     '''Return a random df_dhss filtered by the size of the dhss df to get - max_dhs_num,
@@ -253,6 +260,8 @@ class Global_Vars(object):
 
         rand_ints = sorted(random.sample(range(0, df_dhss.shape[0]), max_dhs_num))
         df_random = df_dhss.iloc[rand_ints, :]
+
+        df_random = np.log2(df_random + 1)  # log transformation before computing pcc
 
         pccs = []
         for ix in range(0, df_random.shape[0]):
@@ -270,10 +279,12 @@ class Global_Vars(object):
                 pccs_1000dhss.append(np.corrcoef(df_.iloc[ix], self.goi)[0, 1])
 
             sns.kdeplot(np.array(pccs_1000dhss), color="red", label="PCCs for {} random DHS sites".format(len(pccs_1000dhss)))  # should be 1000
-            sns.kdeplot(np.array(df_random["pcc"].tolist()), color="blue", label="PCCs for randomly selected DHS sites (n={})".format(df_random.shape[0]))
+            # plt.hist(np.array(df_random["pcc"].tolist()), color="blue", label="PCCs for randomly selected DHS sites (n={})".format(df_random.shape[0]), alpha=0.3)
+            sns.rugplot(np.array(df_random["pcc"].tolist()), label="PCCs for randomly selected DHS sites (n={})".format(df_random.shape[0]))
             plt.xlabel("PCCs")
             plt.ylabel("Density")
             plt.savefig(self.outputDir + "/pccs_for_random_dhss_selection.pdf")
+            plt.close()
 
         return df_random
 
@@ -299,11 +310,13 @@ class Global_Vars(object):
         df_random = df_random.iloc[rand_ints, :]
 
         if (self.see_pccs_for_rndFts):
-            sns.kdeplot(np.array(pccs), color="red", label="PCCs for all fts")
-            sns.kdeplot(np.array(df_random["pcc"].tolist()), color="blue", label="PCCs for randomly selected fts")
+            sns.kdeplot(np.array(pccs), color="red", label="PCCs for all TFs")
+            sns.rugplot(np.array(df_random["pcc"].tolist()), label="PCCs for randomly selected TFs")
+            #sns.kdeplot(np.array(df_random["pcc"].tolist()), color="blue", label="PCCs for randomly selected fts")
             plt.xlabel("PCCs")
             plt.ylabel("Density")
             plt.savefig(self.outputDir + "/pccs_for_random_tf_selection.pdf")
+            plt.close()
 
         df_random = df_random.drop(["abs_pcc"], axis=1)
         df_random = df_random.set_index("pcc", append=True)
