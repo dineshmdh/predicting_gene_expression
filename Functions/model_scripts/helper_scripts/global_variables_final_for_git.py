@@ -4,7 +4,6 @@ Created on Jan 1, 2018
 __author__ = "Dinesh Manandhar"
 
 '''
-import pdb
 import re
 import os
 import random
@@ -111,7 +110,6 @@ class Global_Vars(object):
         self.df_dhss = self.filter_ftsIn_multiIndexed_df_by_pcc_and_size(df_roi_dhss, is_df_dhss=True)  # not log transformed in this
         if (self.use_random_DHSs):
             self.df_dhss = self.get_random_df_dhss_filtdBy_size(df_dhss, max_dhs_num=self.df_dhss.shape[0])  # log transformation is done before computing pcc
-        pdb.set_trace()
 
         df_tfs = self.get_df_tfs(df_rnase, df_cnTfs)  # in this function, tf gexes are log-transformed before getting pccs
         self.logger.info("Total number of TFs originally: {}".format(df_tfs.shape[0]))
@@ -257,7 +255,6 @@ class Global_Vars(object):
 
     def get_random_df_dhss_filtdBy_size(self, df_dhss, max_dhs_num):
         # Note that self.goi has been log-transformed
-        pdb.set_trace()
         rand_ints = sorted(random.sample(range(0, df_dhss.shape[0]), max_dhs_num))
         df_random = df_dhss.iloc[rand_ints, :]
 
