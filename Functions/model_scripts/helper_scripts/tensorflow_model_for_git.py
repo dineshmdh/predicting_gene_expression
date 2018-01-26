@@ -8,6 +8,7 @@ import scipy.stats as stats
 import seaborn as sns
 from hyperopt import STATUS_OK, STATUS_FAIL
 import matplotlib.pyplot as plt
+from HPO_helper import LAMDA_BASE
 
 np.seterr(all='raise')
 plt.switch_backend('agg')
@@ -34,8 +35,14 @@ class Tensorflow_model(object):
         self.logger.addHandler(file_handler)
         self.logger.addHandler(stream_handler)
         ######################################################
-        ########## set basic params #########
+        ########## set basic model params #########
         self.max_iter = gv.max_iter
+        self.pkeep_train = 0.7
+        self.starter_learning_rate = 0.03  # set same for both initial training and re-training
+        self.decay_at_step = 15
+        self.use_sigmoid_h1 = True
+        self.use_sigmoid_h2 = True
+        self.use_sigmoid_yhat = False
         self.test_eid_group_index = test_eid_group_index
 
         ########## from model preparation ##########
@@ -117,12 +124,6 @@ class Tensorflow_model(object):
         else:
             raise Exception()
         lamda = parameters['lamda']
-        pkeep_train = 0.7
-        starter_learning_rate = 0.5
-        decay_at_step = 15
-        use_sigmoid_h1 = True
-        use_sigmoid_h2 = True
-        use_sigmoid_yhat = False
 
         # ------ Variables and placeholders ------
         nn_updates = self.init_nn_updates()
@@ -146,8 +147,8 @@ class Tensorflow_model(object):
 
         # ------ train parameters -----
         global_step = tf.Variable(0, trainable=False, name="global_step")  # like a counter for minimize() function
-        learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
-                                                   decay_steps=decay_at_step, decay_rate=0.96, staircase=True)
+        learning_rate = tf.train.exponential_decay(self.starter_learning_rate, global_step,
+                                                   decay_steps=self.decay_at_step, decay_rate=0.96, staircase=True)
         train_step = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step=global_step)
 
         # ------ performance metric (besides the loss or rmse) -----
@@ -160,16 +161,16 @@ class Tensorflow_model(object):
 
             for i in range(self.max_iter):
 
-                train_data = {X: self.trainX, Y: self.trainY, pkeep: pkeep_train}
+                train_data = {X: self.trainX, Y: self.trainY, pkeep: self.pkeep_train}
                 sess.run(train_step, feed_dict=train_data)
                 nn_updates["learning_rate"].append(learning_rate.eval())  # to be used with Adam opt.
 
-                if (i % 20 == 0):
+                if (i % 10 == 0):
                     val_data = {X: self.valX, Y: self.valY, pkeep: 1}
                     nn_updates = self.get_performance_updates(sess, loss, pcc, train_data, val_data, nn_updates)
 
             ########## Now predict the performance, and update the output dict ########
-            nn_updates["loss"] = 1 - nn_updates["val_pcc"][-1]  # / np.sqrt(nn_updates["val_pcc"][-1] + 0.0001)
+            nn_updates["loss"] = nn_updates["val_loss"][-1]  # previously, 1-val_pcc or val_loss
             if (np.any(np.isnan(nn_updates["loss"]))):
                 nn_updates["loss"] = np.inf  # https://github.com/hyperopt/hyperopt/pull/176
                 nn_updates["status"] = STATUS_FAIL
@@ -182,23 +183,26 @@ class Tensorflow_model(object):
             nn_updates["yhat_test"] = sess.run(Yhat, feed_dict={X: self.testX, Y: self.testY, pkeep: 1})
             nn_updates["W1"] = W1.eval()
             nn_updates["W2"] = W2.eval()
+            nn_updates["b1"] = b1.eval()
+            nn_updates["g1"] = g1.eval()
             if not (wts[3] is None):
                 nn_updates["W3"] = W3.eval()
+                nn_updates["b2"] = b2.eval()
+                nn_updates["g2"] = g2.eval()
 
             print("lamda:{}, layer_sizes:{}, loss:{}, status:{}, yhat_test:{}".format(
                 lamda, layer_sizes, nn_updates["loss"], nn_updates["status"], nn_updates["yhat_test"].flatten()))
 
         return nn_updates
 
-    def tf_model(self, X, Y, W1, W2, W3, b1, g1, b2, g2, pkeep, lamda,
-                 use_sigmoid_h1=True, use_sigmoid_h2=True, use_sigmoid_yhat=False):
+    def tf_model(self, X, Y, W1, W2, W3, b1, g1, b2, g2, pkeep, lamda):
 
         # -------- the core model ---------
         H1 = tf.matmul(X, W1, name="h1")
         H1_mean, H1_var = tf.nn.moments(H1, axes=[0], keep_dims=True, name="h1_moments")
         H1_bn = tf.nn.batch_normalization(H1, H1_mean, H1_var, offset=b1, scale=g1,
                                           variance_epsilon=0.000001, name="h1_bn")  # perform batch normalization
-        if (use_sigmoid_h1):
+        if (self.use_sigmoid_h1):
             H1_bnt = tf.nn.sigmoid(H1_bn, name="h1_bn_sigmoid")
         else:
             H1_bnt = tf.nn.relu(H1_bn, name="h1_bn_relu")
@@ -209,18 +213,18 @@ class Tensorflow_model(object):
             H2_mean, H2_var = tf.nn.moments(H2, axes=[0], keep_dims=True, name="h2_moments")
             H2_bn = tf.nn.batch_normalization(H2, H2_mean, H2_var, offset=b2, scale=g2,
                                               variance_epsilon=0.000001, name="h2_bn")
-            if (use_sigmoid_h2):
+            if (self.use_sigmoid_h2):
                 H2_bnt = tf.nn.sigmoid(H2_bn, name="h2_bn_sigmoid")
             else:
                 H2_bnt = tf.nn.sigmoid(H2_bn, name="h2_bn_relu")
             H2_bnd = tf.nn.dropout(H2_bnt, pkeep, name="h2_after_bns_transformation_and_dropout")
-            if (use_sigmoid_yhat):
+            if (self.use_sigmoid_yhat):
                 Yhat = tf.nn.sigmoid(tf.matmul(H2_bnd, W3), name="Yhat_sigmoid_W3_present")
             else:
                 Yhat = tf.nn.sigmoid(tf.matmul(H2_bnd, W3), name="Yhat_relu_W3_present")
             regularizer = tf.add(tf.add(tf.nn.l2_loss(W1), tf.nn.l2_loss(W2)), tf.nn.l2_loss(W3), name="regularizer")
         else:  # no W3, W2.shape[1]==1
-            if (use_sigmoid_yhat):
+            if (self.use_sigmoid_yhat):
                 Yhat = tf.nn.sigmoid(tf.matmul(H1_bnd, W2), name="Yhat_sigmoid_noW3")
             else:
                 Yhat = tf.nn.relu(tf.matmul(H1_bnd, W2), name="Yhat_relu_noW3")
@@ -256,15 +260,9 @@ class Tensorflow_model(object):
             pes.append(a / b)
         return pes
 
-    def get_log_into_to_save(self, trials, best_params, logger):
-        ''' logger is an argument because self.logger prints multiple
-        (identical) line outputs.'''
+    def get_log_into_to_save(self, trials, best_params):
         index = np.argmin(trials.losses())
-        for i, j in enumerate(zip(trials.losses(), trials.statuses())):
-            print(i, j)
-            logger.info("{}: {}".format(i, j))
-        print("best param index", index)
-        logger.info("Best param index: {}".format(index))
+        print("Best param index", index)
 
         yhat_train = trials.results[index]["yhat_train"].flatten()
         yhat_val = trials.results[index]["yhat_val"].flatten()
@@ -275,31 +273,42 @@ class Tensorflow_model(object):
         pc_test_error = self.get_percentage_error(self.testY.flatten(), yhat_test)
         med_pc_test_error = np.median(pc_test_error)
 
+        # get train, val, test pccs
         med_train_pcc = trials.results[index]["train_pcc"][-1]
         med_val_pcc = trials.results[index]["val_pcc"][-1]
-        med_test_pcc = "na"
+        if (len(pc_test_error) > 2):
+            try:
+                med_test_pcc = np.corrcoef(self.testY.flatten(), yhat_test)[0, 1]
+            except FloatingPointError:
+                med_test_pcc = np.nan
+        else:
+            med_test_pcc = np.nan
+
+        # get train, val and test sccs
         try:
             med_train_scc = stats.spearmanr(self.trainY.flatten(), yhat_train)[0]
             med_val_scc = stats.spearmanr(self.valY.flatten(), yhat_val)[0]
-            med_test_scc = "na"
         except:
-            pdb.set_trace()
-
+            med_train_scc = np.nan
+            med_val_scc = np.nan
         if (len(pc_test_error) > 2):
-            med_test_pcc = np.corrcoef(self.testY.flatten(), yhat_test)[0, 1]
-            med_test_scc = stats.spearmanr(self.testY.flatten(), yhat_test)[0]
+            try:
+                med_test_scc = stats.spearmanr(self.testY.flatten(), yhat_test)[0]
+            except FloatingPointError:
+                med_test_scc = np.nan
 
         pc_test_error = ",".join([str(x) for x in pc_test_error])
-        to_log = "test_group_{}:{};testX.shape:{};median_pc_error:{:.3f},{:.3f},{:.3f};PCC:{:.3f},{:.3f},{};SCC:{:.3f},{:.3f},{};best_params:{};test_pc_errors:{}".format(
+        to_log = "test_group_{}:{};testX.shape:{};median_pc_error:{:.3f},{:.3f},{:.3f};PCC:{:.3f},{:.3f},{:.3f};SCC:{:.3f},{:.3f},{:.3f};best_params:{};test_pc_errors:{}".format(
             self.test_eid_group_index, self.test_eid_group, self.testX.shape,
             med_pc_train_error, med_pc_val_error, med_pc_test_error,  # median pc errors
-            med_train_pcc, med_val_pcc, med_test_pcc if med_test_pcc == "na" else round(med_test_pcc, 3),  # all PCCs
-            med_train_scc, med_val_scc, med_test_scc if med_test_scc == "na" else round(med_test_scc, 3),  # all SCCs
+            med_train_pcc, med_val_pcc, med_test_pcc,  # all PCCs
+            med_train_scc, med_val_scc, med_test_scc,  # all SCCs
             re.sub("\s+", "", str(best_params)), pc_test_error
         )
         return to_log
 
     def plot_scatter_performance(self, trials, gv, plot_title):
+        '''This function will be called from main.py'''
         index = np.argmin(trials.losses())  # trial with least error
         plt.figure(figsize=(5, 5))
         sns.regplot(self.trainY.flatten(), trials.results[index]["yhat_train"].flatten(), robust=False, fit_reg=False, scatter_kws={'alpha': 0.45}, color="salmon")
@@ -313,6 +322,124 @@ class Tensorflow_model(object):
         plt.title(plot_title)
         fig_name = "{}_perf_on_{}.pdf".format(gv.gene_ofInterest, self.test_eid_group)
         plt.savefig(os.path.join(gv.outputDir, fig_name))
+        plt.close()
+
+    def get_params_from_best_trial(self, index, trials, best_params):
+        '''trials and best_params are obtained from HPO search.
+        index is the index in trials.results for the best params'''
+
+        nn_updates = {}
+        nn_updates["train_loss"] = []  # loss == cost == rmse
+        nn_updates["train_pcc"] = []
+        nn_updates["test_loss"] = []
+        nn_updates["test_pcc"] = []
+        nn_updates["learning_rate"] = []
+
+        trainX = np.concatenate((self.trainX, self.valX), axis=0)
+        trainY = np.concatenate((self.trainY, self.valY), axis=0)
+
+        if (best_params["layers"] == 1):
+            layer_sizes = [best_params["n_units_layer_21"], best_params["n_units_layer_22"]]
+        else:
+            layer_sizes = [best_params["n_units_layer_11"]]
+
+        lamda = LAMDA_BASE * 10**(-1 * best_params['lamda'])  # should match call in get_parameter_space_forHPO()
+
+        wts = {}
+        wts[1] = trials.results[index]["W1"]
+        wts[2] = trials.results[index]["W2"]
+        b1 = trials.results[index]["b1"]
+        g1 = trials.results[index]["g1"]
+        if ("W3" in trials.results[index].keys()):  # if W3 is None initially, W3 is not saved later.
+            wts[3] = trials.results[index]["W3"]
+            b2 = trials.results[index]["b2"]
+            g2 = trials.results[index]["g2"]
+        else:
+            wts[3] = None
+            b2 = None
+            g2 = None
+
+        return wts, layer_sizes, lamda, trainX, trainY, nn_updates, b1, g1, b2, g2
+
+    def retrain_tensorflow_nn(self, wts, layer_sizes, lamda, trainX, trainY, nn_updates, b1, g1, b2, g2):
+
+        # ------ Variables and placeholders ------
+        X = tf.placeholder(tf.float32, shape=[None, wts[1].shape[0]], name="X")
+        Y = tf.placeholder(tf.float32, [None, 1], name="Y")  # true Ys
+        pkeep = tf.placeholder(tf.float32, name="pkeep")
+
+        W1 = tf.Variable(tf.cast(wts[1], tf.float32), name="W1")
+        b1 = tf.Variable(tf.cast(b1, tf.float32), name="H1_bn_offset")  # bn == batch normalization
+        g1 = tf.Variable(tf.cast(g1, tf.float32), name="H1_bn_scale")
+        W2 = tf.Variable(tf.cast(wts[2], tf.float32), name="W2")
+
+        if not (wts[3] is None):
+            W3 = tf.Variable(tf.cast(wts[3], tf.float32), name="W3")
+            b2 = tf.Variable(tf.cast(b2, tf.float32), name="H2_bn_offset")
+            g2 = tf.Variable(tf.cast(g2, tf.float32), name="H2_bn_scale")
+        else:
+            W3 = None
+            b2 = None
+            g2 = None
+
+        Yhat, loss = self.tf_model(X, Y, W1, W2, W3, b1, g1, b2, g2, pkeep, lamda)  # loss == rmse
+        pcc = tf.contrib.metrics.streaming_pearson_correlation(Yhat, Y, name="pcc")
+
+        # ------ train parameters -----
+        global_step = tf.Variable(0, trainable=False, name="global_step")  # like a counter for minimize() function
+        learning_rate = tf.train.exponential_decay(self.starter_learning_rate, global_step,
+                                                   decay_steps=self.decay_at_step, decay_rate=0.96, staircase=True)
+        train_step = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step=global_step)
+
+        # ------ start training ------
+        with tf.Session() as sess:
+            init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
+            sess.run(init)
+            print("done initializing the session")
+
+            train_data = {X: trainX, Y: trainY, pkeep: self.pkeep_train}
+            test_data = {X: self.testX, Y: self.testY, pkeep: 1}
+            print("done setting up train and test data")
+
+            for i in range(self.max_iter):
+                sess.run(train_step, feed_dict=train_data)
+                nn_updates["learning_rate"].append(learning_rate.eval())  # to be used with Adam opt.
+                if (i % 10 == 0):
+                    l, p = sess.run([loss, pcc], feed_dict=train_data)
+                    nn_updates["train_loss"].append(l)
+                    nn_updates["train_pcc"].append(p[0])
+                    l_, p_ = sess.run([loss, pcc], feed_dict=test_data)
+                    nn_updates["test_loss"].append(l_)
+                    nn_updates["test_pcc"].append(p_[0])
+
+            ########## Now predict the performance, and update the output dict ########
+            nn_updates["yhat_train"] = sess.run(Yhat, feed_dict={X: trainX, Y: trainY, pkeep: 1})
+            nn_updates["yhat_test"] = sess.run(Yhat, feed_dict={X: self.testX, Y: self.testY, pkeep: 1})
+            nn_updates["W1"] = W1.eval()
+            nn_updates["W2"] = W2.eval()
+            if not (wts[3] is None):
+                nn_updates["W3"] = W3.eval()
+
+        return nn_updates
+
+    def plot_performance_after_retraining(self, gv, updates, trainY, title_prefix=""):
+        '''This function will be called from main().
+        Note the trainX and trainY are updated during retraining but not the testX/Y.
+        The title prefix will look like this: "test_group_7:Epithelial;testX.shape:(8, 47)",
+        and will be obtained from "to_log" line that is sent to main.logger.'''
+        plt.figure(figsize=(5, 5))
+        sns.regplot(trainY.flatten(), updates["yhat_train"].flatten(), robust=False, fit_reg=False, scatter_kws={'alpha': 0.45}, color="salmon")
+        sns.regplot(self.testY.flatten(), updates["yhat_test"].flatten(), robust=False, fit_reg=False, color="steelblue")
+        plt.xlim((0, 1.1))
+        plt.ylim((0, 1.1))
+        plt.plot([[0, 0], [1, 1]], "--")
+        plt.xlabel("Real RPKM signal normalized - after retraining")
+        plt.ylabel("Predicted RPKM signal")
+        pc_test_errors = self.get_percentage_error(real_yhat=self.testY, predicted_yhat=updates["yhat_test"].flatten())
+        plt.title("{}\nmed_test_pc_error:{:.3f};test_pcc:{:.3f}".format(title_prefix, np.median(pc_test_errors), updates["test_pcc"][-1]))
+        fig_name = "{}_perf_on_{}_after_retraining.pdf".format(gv.gene_ofInterest, self.test_eid_group)
+        plt.savefig(os.path.join(fig_name))
+        plt.close()
 
 
 if __name__ == "__main__":
@@ -321,19 +448,19 @@ if __name__ == "__main__":
 
     class Args(object):
         def __init__(self):
-            self.gene = "NANOG"
-            self.distance = 200
+            self.gene = "SIX1"
+            self.distance = 150
             self.use_tad_info = True
-            self.pcc_lowerlimit_to_filter_dhss = 0.25
-            self.take_log2_tpm = True
+            self.pcc_lowerlimit_to_filter_dhss = 0.2
             self.filter_tfs_by = "zscore"  # or "pcc"
-            self.lowerlimit_to_filter_tfs = 4.75
-            self.take_this_many_top_fts = 15  # all dhss/tfs will already be filtered by pcc(or zscore)
+            self.lowerlimit_to_filter_tfs = 6
+            self.take_this_many_top_dhss = 4  # all dhss/tfs will already be filtered by pcc(or zscore)
+            self.take_this_many_top_tfs = 6
             self.init_wts_type = "corr"
-            self.outputDir = "/Users/Dinesh/Dropbox/Github/predicting_gex_with_nn_git/Output/testing"
-            self.use_random_DHSs = False
-            self.use_random_TFs = False
-            self.max_iter = 300
+            self.outputDir = "/Users/Dinesh/Dropbox/Github/predicting_gex_with_nn_git/Output/" + self.gene.upper()
+            self.use_random_DHSs = True
+            self.use_random_TFs = True
+            self.max_iter = 500
 
     args = Args()
     gv = Global_Vars(args, args.outputDir)  # note this takes in new_output_dir as well in .py scripts
