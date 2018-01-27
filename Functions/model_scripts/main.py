@@ -11,7 +11,6 @@ Notes:
 
 '''
 import logging
-import pdb
 import re
 import time
 import os  # os is being used to set up default outputDir
@@ -56,6 +55,7 @@ parser.add_argument("-m", "--max_iter", help="Maximum number of interations for 
 # ============= Other arguments ===========
 parser.add_argument("-o", "--outputDir", help="Output directory. A directory for this gene of interest and set of parameters used is created at this location. (Default is '../Output')", type=str, default=os.path.join(os.getcwd(), "../../Output"))
 parser.add_argument("-k", "--run_id", help="Run_id for multiple parallel runs. This is useful in slurm. (Default: -1)", type=int, default=-1)
+parser.add_argument("-p", "--plot_all", help="If set, all supplemental plots are also generated in addition to the scatterplots showing the performances after hyperparameter optimization and re-training (i.e. training the full training and validation set using the optimized hyperparameters). (Default: Not set)", action="store_true")
 
 args = parser.parse_args()
 
