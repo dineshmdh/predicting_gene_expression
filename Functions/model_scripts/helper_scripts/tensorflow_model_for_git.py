@@ -38,7 +38,7 @@ class Tensorflow_model(object):
         ########## set basic model params #########
         self.max_iter = gv.max_iter
         self.pkeep_train = 0.7
-        self.starter_learning_rate = 0.03  # set same for both initial training and re-training
+        self.starter_learning_rate = 0.1  # set same for both initial training and re-training
         self.decay_at_step = 15
         self.use_sigmoid_h1 = True
         self.use_sigmoid_h2 = True
@@ -328,10 +328,13 @@ class Tensorflow_model(object):
         else:
             xlabel_suffix += " and real TFs"
         plt.xlabel("Real RPKM signal normalized - after init training\n{}".format(xlabel_suffix))
-
+        fig_name = "{}_perf_on_{}_after_init_training".format(gv.gene_ofInterest, self.test_eid_group)
+        if (gv.use_random_DHSs is False) and (gv.use_random_TFs is False):
+            fig_name += "_realFts.pdf"
+        else:
+            fig_name += ".pdf"
         plt.ylabel("Predicted RPKM signal")
         plt.title(plot_title)
-        fig_name = "{}_perf_on_{}_after_init_training.pdf".format(gv.gene_ofInterest, self.test_eid_group)
         plt.savefig(os.path.join(gv.outputDir, fig_name))
         plt.close()
 
@@ -457,8 +460,12 @@ class Tensorflow_model(object):
         plt.ylabel("Predicted RPKM signal")
         pc_test_errors = self.get_percentage_error(real_yhat=self.testY, predicted_yhat=updates["yhat_test"].flatten())
         plt.title("{}\nmed_test_pc_error:{:.3f};test_pcc:{:.3f}".format(title_prefix, np.median(pc_test_errors), updates["test_pcc"][-1]))
-        fig_name = "{}_perf_on_{}_after_retraining.pdf".format(gv.gene_ofInterest, self.test_eid_group)
-        plt.savefig(os.path.join(fig_name))
+        fig_name = "{}_perf_on_{}_after_retraining".format(gv.gene_ofInterest, self.test_eid_group)
+        if (gv.use_random_DHSs is False) and (gv.use_random_TFs is False):
+            fig_name += "_realFts.pdf"
+        else:
+            fig_name += ".pdf"
+        plt.savefig(os.path.join(gv.outputDir, fig_name))
         plt.close()
 
 
