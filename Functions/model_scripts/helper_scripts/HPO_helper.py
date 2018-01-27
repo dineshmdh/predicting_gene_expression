@@ -4,6 +4,9 @@ from functools import partial
 from hyperopt import hp
 
 '''Define some basic HPO functions and variables'''
+LAMDA_BASE = 3  # used to define lamda in parameter space search
+LAMDA_LOWER = 1  # lower limit in 10e-{} space to select lamda
+LAMDA_UPPER = 7
 
 
 def uniform_int(name, lower, upper):
@@ -20,7 +23,7 @@ tpe_method = partial(
     hyperopt.tpe.suggest,
     n_EI_candidates=200,  # 30 # Sample __ candidate and select candidate that has highest Expected Improvement (EI)
     gamma=0.2,  # Use 20% of best observations to estimate next set of parameters
-    n_startup_jobs=8,  # 10 # First __ trials are going to be random
+    n_startup_jobs=5,  # 10 # First __ trials are going to be random
 )
 
 
@@ -36,10 +39,10 @@ def get_parameter_space_forHPO(trainX):
         }, {
             'n_layers': 2,
             'n_units_layer': [
-                uniform_int('n_units_layer_21', h1_lower, h1_upper),
-                uniform_int('n_units_layer_22', int(0.66 * h1_lower), int(0.66 * h1_upper)),
+                uniform_int('n_units_layer_21', max(2, h1_lower), max(2, h1_upper)),
+                uniform_int('n_units_layer_22', max(1, int(0.66 * h1_lower)), max(int(0.66 * h1_upper), 1)),
             ],
         }]),
-        'lamda': 3 * 10**(-1 * uniform_int("lamda", 1, 7))
+        'lamda': LAMDA_BASE * 10**(-1 * uniform_int("lamda", LAMDA_LOWER, LAMDA_UPPER))
     }
     return parameter_space
