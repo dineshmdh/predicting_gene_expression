@@ -17,7 +17,6 @@ import os  # os is being used to set up default outputDir
 import argparse
 import sys
 import hyperopt
-from hyperopt import fmin
 
 start_time = time.time()
 sys.path = sys.path[1:]
@@ -26,7 +25,6 @@ sys.path.insert(0, os.path.join(os.getcwd(), "helper_scripts"))
 from global_variables_final_for_git import Global_Vars
 from prep_for_model_for_git import Model_preparation
 from tensorflow_model_for_git import Tensorflow_model
-import HPO_helper
 from HPO_helper import uniform_int, loguniform_int, tpe_method, get_parameter_space_forHPO
 
 ############################################################
