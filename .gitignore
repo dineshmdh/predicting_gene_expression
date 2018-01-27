@@ -1,7 +1,12 @@
+.*  # ignore all hidden files and folders
+!/.gitignore
 .DS_Store
 Functions/notes.py
 Functions/test.ipynb
 Functions/model_scripts/python_*
+Functions/model_scripts/helper_scripts/compute_mutual_information.py
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
 **/*.pyc
 Output/
 Input_files/
