@@ -1,3 +1,32 @@
+'''
+Created 1/1/2018
+
+__author__ = "Dinesh Manandhar"
+
+Notes on implementation:
+
+1. When the running "mode" is "dhss" or "tfs",
+the trainX and testX matrices are "extracted" from the
+joint df (i.e. df_dhss and df_tfs merged). This is because
+the indexes for df_dhss and df_tfs are different before
+merging and are processed during merging to have just the
+name (i.e. dhs loc or geneName) and "confidence" measure
+as a measure of its similarity with the gene expression
+for the target gene. (Although this shouldn't matter much
+for "dhss" or "tfs" mode, this will also help with plotting
+the dataframes later.)
+2. The features are expected to be (and are) sorted for df_dhss and
+df_tfs that are merged to get the df_joint. This is because
+while selecting df_tfs (for mode=="tfs"), top tfs need to
+be selected. These dfs are sorted by their similarity measure
+(discussed above) for when real features are used. When random
+features are selected, no sorting is necessary or done.
+
+3. (To do?) Optionally I could not compute test_loss in the
+retraining step. I will be using rmse to assess model performance.
+(Note: loss = rmse + regularization).
+
+'''
 import pdb
 import logging
 import re
@@ -16,7 +45,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # To ignore TF warning in stdout (sour
 
 
 class Tensorflow_model(object):
-    def __init__(self, gv, mp, test_eid_group_index):
+    def __init__(self, gv, mp, test_eid_group_index, mode):
 
         ######################################################
         # set the logging handlers and params
@@ -38,12 +67,14 @@ class Tensorflow_model(object):
         ########## set basic model params #########
         self.max_iter = gv.max_iter
         self.pkeep_train = 0.7
-        self.starter_learning_rate = 0.1  # set same for both initial training and re-training
-        self.decay_at_step = 15
+        self.starter_learning_rate = 0.3  # updated by * 0.5 for re-training
+        self.decay_at_step = 15  # learning rate is updated after this many training steps
         self.use_sigmoid_h1 = True
         self.use_sigmoid_h2 = True
         self.use_sigmoid_yhat = False
         self.test_eid_group_index = test_eid_group_index
+        assert mode in ["dhss", "tfs", "joint"]
+        self.mode = mode  # one of "dhss", "tfs" or "joint"
 
         ########## from model preparation ##########
         self.val_eid_group = "ENCODE2012"  # will be used as validation set; always fixed.
@@ -53,8 +84,9 @@ class Tensorflow_model(object):
         self.val_eids = mp.get_eids_for_a_group(df_eids, self.val_eid_group)
         self.test_eids = mp.get_eids_for_a_group(df_eids, self.test_eid_group)
 
-        '''Get train and test X matrices for the models.
-        Note these X matrices have fts as rows and samples as cols.'''
+        '''Get train and test X matrices (like train_dhss) for the models.
+        Note these X matrices (like train_dhss) have fts as rows and samples as cols.
+        These will be transposed to get train/test/X/Y matrices later.'''
         self.train_dhss, self.val_dhss, self.test_dhss = mp.get_normalized_train_val_test_dfs(gv.df_dhss, self.train_eids, self.val_eids, self.test_eids)
         self.train_tfs, self.val_tfs, self.test_tfs = mp.get_normalized_train_val_test_dfs(gv.df_tfs, self.train_eids, self.val_eids, self.test_eids)
         self.train_joint = mp.merge_dhs_and_tf_dfs(self.train_dhss, self.train_tfs, gv)  # for dhs+tf joint model
@@ -67,9 +99,20 @@ class Tensorflow_model(object):
         #############################################
 
         ########## only consider joint model for now ##########
-        self.trainX = np.array(self.train_joint.transpose())
-        self.valX = np.array(self.val_joint.transpose())
-        self.testX = np.array(self.test_joint.transpose())
+        if (mode == "joint"):
+            self.trainX = np.array(self.train_joint.transpose())
+            self.valX = np.array(self.val_joint.transpose())
+            self.testX = np.array(self.test_joint.transpose())
+        elif (mode == "dhss"):  # see Note num 2 above
+            num_dhss = self.train_dhss.shape[0]
+            self.trainX = np.array(self.train_joint.iloc[0:num_dhss, :].transpose())
+            self.valX = np.array(self.val_joint.iloc[0:num_dhss, :].transpose())
+            self.testX = np.array(self.test_joint.iloc[0:num_dhss, :].transpose())
+        else:  # see Note num 2 above
+            num_dhss = self.train_dhss.shape[0]
+            self.trainX = np.array(self.train_joint.iloc[num_dhss:, :].transpose())
+            self.valX = np.array(self.val_joint.iloc[num_dhss:, :].transpose())
+            self.testX = np.array(self.test_joint.iloc[num_dhss:, :].transpose())
 
         self.trainY = np.array(self.train_goi.tolist())
         self.trainY = self.trainY.reshape(self.trainY.shape[0], -1)
@@ -78,43 +121,19 @@ class Tensorflow_model(object):
         self.testY = np.array(self.test_goi.tolist())
         self.testY = self.testY.reshape(self.testY.shape[0], -1)
 
-        if (np.max(self.trainY) > 1):
-            self.logger.error("max(tm.trainY) was > 1..")  # warning only to debug
-            pdb.set_trace()
-
+        assert np.max(self.trainY) <= 1
         ############## end of __init__() #############
 
     def init_nn_updates(self):
         nn_updates = {}
-        nn_updates["train_loss"] = []  # loss == cost == rmse
-        nn_updates["train_pcc"] = []
+        nn_updates["train_loss"] = []  # loss = rmse + regularization
         nn_updates["val_loss"] = []
+        nn_updates["train_pcc"] = []
         nn_updates["val_pcc"] = []
-        # nn_updates["test_loss"] = []  # not being used; will be of length one for one self/tm model
-        # nn_updates["test_pcc"] = []
         nn_updates["learning_rate"] = []
         return nn_updates
 
-    def get_performance_updates(self, sess, loss, pcc, train_data, val_data, nn_updates):
-        '''Note: loss == rmse == cost (below)'''
-        # success in train?
-        l, p = sess.run([loss, pcc], feed_dict=train_data)
-        nn_updates["train_loss"].append(l)
-        nn_updates["train_pcc"].append(p[0])
-        # success in val?
-        l_, p_ = sess.run([loss, pcc], feed_dict=val_data)
-        nn_updates["val_loss"].append(l_)
-        nn_updates["val_pcc"].append(p_[0])
-
-        return nn_updates
-
     def train_tensorflow_nn(self, parameters):
-        '''Arugments:
-        - All input arguments with "_" are real arrays to feed in as data.
-        - lamda: regularization parameter
-        - starter_learning_rate: Initial learning rate for the learning rate decay computation below
-        - decay_at_step: learning rate is updated after this many training steps (Easier to think this way)
-        '''
 
         layer_sizes = [int(n) for n in parameters['layers']['n_units_layer']]
         if (len(layer_sizes) == 1):
@@ -143,16 +162,14 @@ class Tensorflow_model(object):
             b2 = tf.Variable(tf.zeros([wts[2].shape[1]]), name="H2_bn_offset")
             g2 = tf.Variable(tf.zeros([wts[2].shape[1]]), name="H2_bn_scale")
 
-        Yhat, loss = self.tf_model(X, Y, W1, W2, W3, b1, g1, b2, g2, pkeep, lamda)  # loss == rmse
+        Yhat, rmse, loss = self.tf_model(X, Y, W1, W2, W3, b1, g1, b2, g2, pkeep, lamda)  # loss = rmse + regularization
+        pcc = tf.contrib.metrics.streaming_pearson_correlation(Yhat, Y, name="pcc")
 
         # ------ train parameters -----
         global_step = tf.Variable(0, trainable=False, name="global_step")  # like a counter for minimize() function
         learning_rate = tf.train.exponential_decay(self.starter_learning_rate, global_step,
                                                    decay_steps=self.decay_at_step, decay_rate=0.96, staircase=True)
         train_step = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step=global_step)
-
-        # ------ performance metric (besides the loss or rmse) -----
-        pcc = tf.contrib.metrics.streaming_pearson_correlation(Yhat, Y, name="pcc")
 
         # ------ start training ------
         with tf.Session() as sess:
@@ -161,13 +178,16 @@ class Tensorflow_model(object):
 
             for i in range(self.max_iter):
 
-                train_data = {X: self.trainX, Y: self.trainY, pkeep: self.pkeep_train}
-                sess.run(train_step, feed_dict=train_data)
+                sess.run(train_step, feed_dict={X: self.trainX, Y: self.trainY, pkeep: self.pkeep_train})
                 nn_updates["learning_rate"].append(learning_rate.eval())  # to be used with Adam opt.
 
                 if (i % 10 == 0):
-                    val_data = {X: self.valX, Y: self.valY, pkeep: 1}
-                    nn_updates = self.get_performance_updates(sess, loss, pcc, train_data, val_data, nn_updates)
+                    l, p = sess.run([loss, pcc], feed_dict={X: self.trainX, Y: self.trainY, pkeep: 1})
+                    nn_updates["train_loss"].append(l)
+                    nn_updates["train_pcc"].append(p[0])
+                    l, p = sess.run([loss, pcc], feed_dict={X: self.valX, Y: self.valY, pkeep: 1})
+                    nn_updates["val_loss"].append(l)
+                    nn_updates["val_pcc"].append(p[0])
 
             ########## Now predict the performance, and update the output dict ########
             nn_updates["loss"] = nn_updates["val_loss"][-1]  # previously, 1-val_pcc or val_loss
@@ -177,10 +197,6 @@ class Tensorflow_model(object):
             else:
                 nn_updates["status"] = STATUS_OK
 
-            nn_updates = self.get_performance_updates(sess, loss, pcc, train_data, val_data, nn_updates)
-            nn_updates["yhat_train"] = sess.run(Yhat, feed_dict={X: self.trainX, Y: self.trainY, pkeep: 1})
-            nn_updates["yhat_val"] = sess.run(Yhat, feed_dict={X: self.valX, Y: self.valY, pkeep: 1})
-            nn_updates["yhat_test"] = sess.run(Yhat, feed_dict={X: self.testX, Y: self.testY, pkeep: 1})
             nn_updates["W1"] = W1.eval()
             nn_updates["W2"] = W2.eval()
             nn_updates["b1"] = b1.eval()
@@ -190,8 +206,25 @@ class Tensorflow_model(object):
                 nn_updates["b2"] = b2.eval()
                 nn_updates["g2"] = g2.eval()
 
-            print("lamda:{}, layer_sizes:{}, loss:{}, status:{}, yhat_test:{}".format(
-                lamda, layer_sizes, nn_updates["loss"], nn_updates["status"], nn_updates["yhat_test"].flatten()))
+            y, r, l, p = sess.run([Yhat, rmse, loss, pcc], feed_dict={X: self.trainX, Y: self.trainY, pkeep: 1})
+            nn_updates["yhat_train"] = y
+            nn_updates["train_rmse"] = r
+            nn_updates["train_loss"].append(l)
+            nn_updates["train_pcc"].append(p[0])
+
+            y, r, l, p = sess.run([Yhat, rmse, loss, pcc], feed_dict={X: self.valX, Y: self.valY, pkeep: 1})
+            nn_updates["yhat_val"] = y
+            nn_updates["val_rmse"] = r
+            nn_updates["val_loss"].append(l)
+            nn_updates["val_pcc"].append(p[0])
+
+            y, r, l, p = sess.run([Yhat, rmse, loss, pcc], feed_dict={X: self.testX, Y: self.testY, pkeep: 1})
+            nn_updates["yhat_test"] = y
+            nn_updates["test_rmse"] = r
+            nn_updates["test_loss"] = l  # saving for the first time
+            nn_updates["test_pcc"] = p[0]
+
+            print("lamda:{}, layer_sizes:{}, loss:{}, status:{}, yhat_test:{}".format(lamda, layer_sizes, nn_updates["loss"], nn_updates["status"], nn_updates["yhat_test"].flatten()))
 
         return nn_updates
 
@@ -230,13 +263,16 @@ class Tensorflow_model(object):
                 Yhat = tf.nn.relu(tf.matmul(H1_bnd, W2), name="Yhat_relu_noW3")
             regularizer = tf.add(tf.nn.l2_loss(W1), tf.nn.l2_loss(W2), name="regularizer")
 
-        loss = tf.sqrt(tf.reduce_mean(tf.squared_difference(Yhat, Y)), name="loss")  # cost function to minimize
-        loss = loss + lamda * regularizer
+        rmse = tf.sqrt(tf.reduce_mean(tf.squared_difference(Yhat, Y)), name="loss")
+        loss = rmse + lamda * regularizer
 
-        return Yhat, loss
+        return Yhat, rmse, loss
 
     def get_random_wts(self, layer_sizes, use_h2=False):
-        # layer_sizes is either a 1-d or 2-d array
+        '''Parameters:
+
+            layer_sizes:    This is either a 1-d or 2-d array.
+        '''
         i = self.trainX.shape[1]
         o = 1
 
@@ -254,29 +290,37 @@ class Tensorflow_model(object):
         return wts
 
     def get_percentage_error(self, real_yhat, predicted_yhat):
+
         pes = []  # pes = percentage errors
         y_minus_yhat = abs(real_yhat.flatten() - predicted_yhat.flatten())
         for a, b in zip(y_minus_yhat, real_yhat.flatten()):
             pes.append(a / b)
         return pes
 
-    def get_log_into_to_save(self, trials, best_params):
-        index = np.argmin(trials.losses())
-        print("Best param index", index)
+    def get_log_into_to_save(self, index, trials, best_params, mode):
+        '''Parameters:
+
+            index : Represents the index for the best parameter set
+                    in the trials.results object.
+        '''
 
         yhat_train = trials.results[index]["yhat_train"].flatten()
         yhat_val = trials.results[index]["yhat_val"].flatten()
         yhat_test = trials.results[index]["yhat_test"].flatten()
 
+        rmse_train = trials.results[index]["train_rmse"]  # rmse's are saved as scalars (in lists)
+        rmse_val = trials.results[index]["val_rmse"]
+        rmse_test = trials.results[index]["test_rmse"]
+
         med_pc_train_error = np.median(self.get_percentage_error(self.trainY.flatten(), yhat_train))
         med_pc_val_error = np.median(self.get_percentage_error(self.valY.flatten(), yhat_val))
-        pc_test_error = self.get_percentage_error(self.testY.flatten(), yhat_test)
-        med_pc_test_error = np.median(pc_test_error)
+        pc_test_errors = self.get_percentage_error(self.testY.flatten(), yhat_test)
+        med_pc_test_error = np.median(pc_test_errors)
 
         # get train, val, test pccs
         med_train_pcc = trials.results[index]["train_pcc"][-1]
         med_val_pcc = trials.results[index]["val_pcc"][-1]
-        if (len(pc_test_error) > 2):
+        if (len(pc_test_errors) > 2):
             try:
                 med_test_pcc = np.corrcoef(self.testY.flatten(), yhat_test)[0, 1]
             except FloatingPointError:
@@ -291,32 +335,48 @@ class Tensorflow_model(object):
         except:
             med_train_scc = np.nan
             med_val_scc = np.nan
-        if (len(pc_test_error) > 2):
+        if (len(pc_test_errors) > 2):  # as with med_test_pcc above
             try:
                 med_test_scc = stats.spearmanr(self.testY.flatten(), yhat_test)[0]
             except FloatingPointError:
                 med_test_scc = np.nan
+        else:
+            med_test_scc = np.nan
 
-        pc_test_error = ",".join([str(x) for x in pc_test_error])
-        to_log = "test_group_{}:{};testX.shape:{};median_pc_error:{:.3f},{:.3f},{:.3f};PCC:{:.3f},{:.3f},{:.3f};SCC:{:.3f},{:.3f},{:.3f};best_params:{};test_pc_errors:{}".format(
-            self.test_eid_group_index, self.test_eid_group, self.testX.shape,
+        to_log = "mode:{};test_group_{}:{};testX.shape:{};median_pc_error:{:.3f},{:.3f},{:.3f};rmse:{:.3f},{:.3f},{:.3f};PCC:{:.3f},{:.3f},{:.3f};SCC:{:.3f},{:.3f},{:.3f};best_params:{};test_pc_errors:{}".format(
+            mode, self.test_eid_group_index, self.test_eid_group, self.testX.shape,
             med_pc_train_error, med_pc_val_error, med_pc_test_error,  # median pc errors
+            rmse_train, rmse_val, rmse_test,  # rmse measures
             med_train_pcc, med_val_pcc, med_test_pcc,  # all PCCs
             med_train_scc, med_val_scc, med_test_scc,  # all SCCs
-            re.sub("\s+", "", str(best_params)), pc_test_error
-        )
+            re.sub("\s+", "", str(best_params)),
+            ",".join([str(x) for x in pc_test_errors]))
+
         return to_log
 
-    def plot_scatter_performance(self, trials, gv, plot_title):
-        '''This function will be called from main.py'''
-        index = np.argmin(trials.losses())  # trial with least error
+    def plot_scatter_performance(self, mode, index, trials, gv, plot_title):
+        '''This function will be called from main.py.
+
+        Parameters:
+
+        plot_title: This is the prefix from the logger performance
+                    output line called and saved in main.py. Hence,
+                    this already has the mode information.
+        index:      Index for trial with the least error
+        '''
         plt.figure(figsize=(5, 5))
-        sns.regplot(self.trainY.flatten(), trials.results[index]["yhat_train"].flatten(), robust=False, fit_reg=False, scatter_kws={'alpha': 0.45}, color="salmon")
-        sns.regplot(self.valY.flatten(), trials.results[index]["yhat_val"].flatten(), robust=False, fit_reg=False, color="mediumvioletred")
-        sns.regplot(self.testY.flatten(), trials.results[index]["yhat_test"].flatten(), robust=False, fit_reg=False, color="steelblue")
+        sns.regplot(self.trainY.flatten(), trials.results[index]["yhat_train"].flatten(),
+                    robust=False, fit_reg=False, scatter_kws={'alpha': 0.45}, color="salmon")
+        sns.regplot(self.valY.flatten(), trials.results[index]["yhat_val"].flatten(),
+                    robust=False, fit_reg=False, color="mediumvioletred")
+        sns.regplot(self.testY.flatten(), trials.results[index]["yhat_test"].flatten(),
+                    robust=False, fit_reg=False, color="steelblue")
+
         plt.xlim((0, 1.1))
         plt.ylim((0, 1.1))
         plt.plot([[0, 0], [1, 1]], "--")
+        plt.ylabel("Predicted RPKM signal")
+        plt.title(plot_title)
 
         xlabel_suffix = "using"
         if (gv.use_random_DHSs):
@@ -328,24 +388,25 @@ class Tensorflow_model(object):
         else:
             xlabel_suffix += " and real TFs"
         plt.xlabel("Real RPKM signal normalized - after init training\n{}".format(xlabel_suffix))
-        fig_name = "{}_perf_on_{}_after_init_training".format(gv.gene_ofInterest, self.test_eid_group)
+
+        fig_name = "{}_perf_on_{}_after_initTraining_mode_{}".format(gv.gene_ofInterest, self.test_eid_group, mode)
         if (gv.use_random_DHSs is False) and (gv.use_random_TFs is False):
             fig_name += "_realFts.pdf"
         else:
             fig_name += ".pdf"
-        plt.ylabel("Predicted RPKM signal")
-        plt.title(plot_title)
+
         plt.savefig(os.path.join(gv.outputDir, fig_name))
         plt.close()
 
     def get_params_from_best_trial(self, index, trials, best_params):
-        '''trials and best_params are obtained from HPO search.
-        index is the index in trials.results for the best params'''
+        '''Parameters:
 
+            index: Index in trials.results for the best params
+        '''
         nn_updates = {}
-        nn_updates["train_loss"] = []  # loss == cost == rmse
-        nn_updates["train_pcc"] = []
+        nn_updates["train_loss"] = []  # loss = rmse + regularization
         nn_updates["test_loss"] = []
+        nn_updates["train_pcc"] = []
         nn_updates["test_pcc"] = []
         nn_updates["learning_rate"] = []
 
@@ -376,6 +437,7 @@ class Tensorflow_model(object):
         return wts, layer_sizes, lamda, trainX, trainY, nn_updates, b1, g1, b2, g2
 
     def retrain_tensorflow_nn(self, wts, layer_sizes, lamda, trainX, trainY, nn_updates, b1, g1, b2, g2):
+        self.starter_learning_rate = self.starter_learning_rate * 0.5
 
         # ------ Variables and placeholders ------
         X = tf.placeholder(tf.float32, shape=[None, wts[1].shape[0]], name="X")
@@ -396,7 +458,7 @@ class Tensorflow_model(object):
             b2 = None
             g2 = None
 
-        Yhat, loss = self.tf_model(X, Y, W1, W2, W3, b1, g1, b2, g2, pkeep, lamda)  # loss == rmse
+        Yhat, rmse, loss = self.tf_model(X, Y, W1, W2, W3, b1, g1, b2, g2, pkeep, lamda)
         pcc = tf.contrib.metrics.streaming_pearson_correlation(Yhat, Y, name="pcc")
 
         # ------ train parameters -----
@@ -409,44 +471,86 @@ class Tensorflow_model(object):
         with tf.Session() as sess:
             init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
             sess.run(init)
-            print("done initializing the session")
-
-            train_data = {X: trainX, Y: trainY, pkeep: self.pkeep_train}
-            test_data = {X: self.testX, Y: self.testY, pkeep: 1}
-            print("done setting up train and test data")
 
             for i in range(self.max_iter):
-                sess.run(train_step, feed_dict=train_data)
+                sess.run(train_step, feed_dict={X: trainX, Y: trainY, pkeep: self.pkeep_train})
                 nn_updates["learning_rate"].append(learning_rate.eval())  # to be used with Adam opt.
-                if (i % 10 == 0):
-                    l, p = sess.run([loss, pcc], feed_dict=train_data)
+
+                if (i % 5 == 0):
+                    l, p = sess.run([loss, pcc], feed_dict={X: trainX, Y: trainY, pkeep: 1})
                     nn_updates["train_loss"].append(l)
                     nn_updates["train_pcc"].append(p[0])
-                    l_, p_ = sess.run([loss, pcc], feed_dict=test_data)
-                    nn_updates["test_loss"].append(l_)
-                    nn_updates["test_pcc"].append(p_[0])
+                    l, p = sess.run([loss, pcc], feed_dict={X: self.testX, Y: self.testY, pkeep: 1})
+                    nn_updates["test_loss"].append(l)
+                    nn_updates["test_pcc"].append(p[0])
 
             ########## Now predict the performance, and update the output dict ########
-            nn_updates["yhat_train"] = sess.run(Yhat, feed_dict={X: trainX, Y: trainY, pkeep: 1})
-            nn_updates["yhat_test"] = sess.run(Yhat, feed_dict={X: self.testX, Y: self.testY, pkeep: 1})
             nn_updates["W1"] = W1.eval()
             nn_updates["W2"] = W2.eval()
             if not (wts[3] is None):
                 nn_updates["W3"] = W3.eval()
 
+            y, r, l, p = sess.run([Yhat, rmse, loss, pcc], feed_dict={X: trainX, Y: trainY, pkeep: 1})
+            nn_updates["yhat_train"] = y  # saving for the first time
+            nn_updates["train_rmse"] = r
+            nn_updates["train_loss"].append(l)
+            nn_updates["train_pcc"].append(p[0])
+
+            y, r, l, p = sess.run([Yhat, rmse, loss, pcc], feed_dict={X: self.testX, Y: self.testY, pkeep: 1})
+            nn_updates["yhat_test"] = y
+            nn_updates["test_rmse"] = r
+            nn_updates["test_loss"].append(l)
+            nn_updates["test_pcc"].append(p[0])
+
         return nn_updates
 
-    def plot_performance_after_retraining(self, gv, updates, trainY, title_prefix=""):
+    def get_log_info_to_save_after_retraining(self, trainY, updates, title_prefix=""):
+        '''Parameters:
+
+            trainY:         trainY is updated after retraining, and has valY info as well.
+                            Hence, this is different from self.trainY. (testY remains
+                            the same and therefore need not be passed in as parameter.)
+            title_prefix:   The title prefix will look like this:
+                            "mode:joint;test_group_7:Epithelial;testX.shape:(8, 47)".
+                            This is obtained from "to_log" line that is sent to main.logger.
+
+        '''
+        pc_train_errors = self.get_percentage_error(
+            real_yhat=trainY, predicted_yhat=updates["yhat_train"].flatten())
+        pc_test_errors = self.get_percentage_error(
+            real_yhat=self.testY, predicted_yhat=updates["yhat_test"].flatten())
+
+        title_line1 = title_prefix
+        title_line2 = "median_pc_error:{:.3f},{:.3f};rmse:{:.3f},{:.3f}".format(
+            np.median(pc_train_errors), np.median(pc_test_errors),
+            updates["train_rmse"], updates["test_rmse"])
+        title_line3 = "PCC:{:.3f},{:.3f}".format(updates["train_pcc"][-1], updates["test_pcc"][-1])
+
+        pc_test_errors = ",".join([str(x) for x in pc_test_errors])
+        to_log = "{};{};{};test_pc_errors:{}".format(
+            title_line1, title_line2, title_line3, pc_test_errors)
+        plot_title = "{}\n{}\n{}".format(title_line1, title_line2, title_line3)
+
+        return to_log, plot_title
+
+    def plot_performance_after_retraining(self, mode, gv, updates, trainY, plot_title):
         '''This function will be called from main().
-        Note the trainX and trainY are updated during retraining but not the testX/Y.
-        The title prefix will look like this: "test_group_7:Epithelial;testX.shape:(8, 47)",
-        and will be obtained from "to_log" line that is sent to main.logger.'''
+        Parameters:
+
+            mode:       one of "dhss", "tfs" or "joint"
+
+            trainY:     Note the trainX and trainY are updated during retraining
+                        but not the testX/Y.
+        '''
         plt.figure(figsize=(5, 5))
         sns.regplot(trainY.flatten(), updates["yhat_train"].flatten(), robust=False, fit_reg=False, scatter_kws={'alpha': 0.45}, color="salmon")
         sns.regplot(self.testY.flatten(), updates["yhat_test"].flatten(), robust=False, fit_reg=False, color="steelblue")
         plt.xlim((0, 1.1))
         plt.ylim((0, 1.1))
         plt.plot([[0, 0], [1, 1]], "--")
+        plt.ylabel("Predicted RPKM signal")
+        plt.title(plot_title)
+
         xlabel_suffix = "using"
         if (gv.use_random_DHSs):
             xlabel_suffix += " random DHSs"
@@ -457,14 +561,13 @@ class Tensorflow_model(object):
         else:
             xlabel_suffix += " and real TFs"
         plt.xlabel("Real RPKM signal normalized - after retraining\n{}".format(xlabel_suffix))
-        plt.ylabel("Predicted RPKM signal")
-        pc_test_errors = self.get_percentage_error(real_yhat=self.testY, predicted_yhat=updates["yhat_test"].flatten())
-        plt.title("{}\nmed_test_pc_error:{:.3f};test_pcc:{:.3f}".format(title_prefix, np.median(pc_test_errors), updates["test_pcc"][-1]))
-        fig_name = "{}_perf_on_{}_after_retraining".format(gv.gene_ofInterest, self.test_eid_group)
+
+        fig_name = "{}_perf_on_{}_after_retraining_mode_{}".format(gv.gene_ofInterest, self.test_eid_group, mode)
         if (gv.use_random_DHSs is False) and (gv.use_random_TFs is False):
             fig_name += "_realFts.pdf"
         else:
             fig_name += ".pdf"
+
         plt.savefig(os.path.join(gv.outputDir, fig_name))
         plt.close()
 
