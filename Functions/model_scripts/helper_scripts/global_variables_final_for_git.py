@@ -240,7 +240,7 @@ class Global_Vars(object):
     '''Filter by zcore/pcc lower limit first, then filter again to get only top fts'''
 
     def filter_tf_fts(self, df_tfs):
-        df_tfs = df_tfs[abs(df_tfs.index.get_level_values("pcc")) >= 0.2]
+        df_tfs = df_tfs[abs(df_tfs.index.get_level_values("pcc")) >= self.pcc_lowerlimit_to_filter_tfs]
         if (self.filter_tfs_by == "zscore"):  # zscores are all positive; sorting and filtering is not complicated.
             df_tfs = df_tfs[df_tfs.index.get_level_values("zscore") >= self.lowerlimit_to_filter_tfs]
             if (df_tfs.shape[0] > self.take_this_many_top_tfs > 0):  # self.take_this_many_top_tfs is set to -1 if all fts are to be used
@@ -277,7 +277,6 @@ class Global_Vars(object):
                 pccs_1000dhss.append(np.corrcoef(df_.iloc[ix], self.goi)[0, 1])
 
             sns.kdeplot(np.array(pccs_1000dhss), color="red", label="PCCs for {} random DHS sites".format(len(pccs_1000dhss)))  # should be 1000
-            # plt.hist(np.array(df_random["pcc"].tolist()), color="blue", label="PCCs for randomly selected DHS sites (n={})".format(df_random.shape[0]), alpha=0.3)
             sns.rugplot(np.array(pccs), label="PCCs for randomly selected DHS sites (n={})".format(df_random.shape[0]))
             plt.xlabel("PCCs")
             plt.ylabel("Density")
@@ -310,7 +309,6 @@ class Global_Vars(object):
         if (self.see_pccs_for_rndFts):
             sns.kdeplot(np.array(pccs), color="red", label="PCCs for all TFs")
             sns.rugplot(np.array(df_random["pcc"].tolist()), label="PCCs for randomly selected TFs")
-            #sns.kdeplot(np.array(df_random["pcc"].tolist()), color="blue", label="PCCs for randomly selected fts")
             plt.xlabel("PCCs")
             plt.ylabel("Density")
             plt.savefig(self.outputDir + "/pccs_for_random_tf_selection.pdf")
