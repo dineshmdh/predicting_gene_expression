@@ -65,8 +65,8 @@ To our knowledge, this is the first cross - cell type prediction framework that 
 3. By design of our leave - one - tissue - group - out learning framework, our model does not perform well for tissue - specific genes tested against the same tissues.
 
 
-========================
-# edited functions to normalize to [0-1] scale..
+== == == == == == == == == == == ==
+# edited functions (now also copied) to normalize to [0-1] scale..
 
     def get_normalized_train_val_test_dfs(self, df, train_eids, val_eids, test_eids):
 
@@ -102,5 +102,43 @@ To our knowledge, this is the first cross - cell type prediction framework that 
         train_goi = train_goi_shifted / max_gex_in_train
         val_goi = (val_goi - min_gex_in_train) / max_gex_in_train
         test_goi = (test_goi - min_gex_in_train) / max_gex_in_train
+
+        return train_goi, val_goi, test_goi
+
+
+== == == == ==
+
+
+# original/ what i had before
+
+    def get_normalized_train_val_test_dfs(self, df, train_eids, val_eids, test_eids):
+
+        train_df = df[train_eids]
+        max_in_train = np.amax(np.array(train_df))
+        train_df_normed = train_df.div(max_in_train)
+
+        val_df = df[val_eids]
+        val_df_normed = val_df.div(max_in_train)
+
+        test_df = df[test_eids]
+        test_df_normed = test_df.div(max_in_train)
+        return train_df_normed, val_df_normed, test_df_normed
+
+    '''Normalize and split goi to train and test vectors.'''
+
+    def get_normalized_train_val_and_test_goi(self, gv, train_eids, val_eids, test_eids):
+
+        train_goi = gv.goi[gv.goi.index.isin(train_eids)]
+        val_goi = gv.goi[gv.goi.index.isin(val_eids)]
+        test_goi = gv.goi[gv.goi.index.isin(test_eids)]
+        assert np.array_equal(train_eids, train_goi.index.tolist())  # check the order of samples
+        assert np.array_equal(val_eids, val_goi.index.tolist())
+        assert np.array_equal(test_eids, test_goi.index.tolist())
+
+        '''Now normalize'''
+        max_gex_in_train = max(train_goi)
+        train_goi = train_goi / max_gex_in_train
+        val_goi = val_goi / max_gex_in_train
+        test_goi = test_goi / max_gex_in_train
 
         return train_goi, val_goi, test_goi
