@@ -224,7 +224,7 @@ class Tensorflow_model(object):
             nn_updates["test_loss"] = l  # saving for the first time
             nn_updates["test_pcc"] = p[0]
 
-            print("lamda:{}, layer_sizes:{}, loss:{}, status:{}, yhat_test:{}".format(lamda, layer_sizes, nn_updates["loss"], nn_updates["status"], nn_updates["yhat_test"].flatten()))
+            print("lamda:{}, layer_sizes:{}, test_rmse:{}, status:{}, yhat_test:{}".format(lamda, layer_sizes, nn_updates["test_rmse"], nn_updates["status"], nn_updates["yhat_test"].flatten()))
 
         return nn_updates
 
@@ -294,6 +294,8 @@ class Tensorflow_model(object):
         pes = []  # pes = percentage errors
         y_minus_yhat = abs(real_yhat.flatten() - predicted_yhat.flatten())
         for a, b in zip(y_minus_yhat, real_yhat.flatten()):
+            if (b == 0):
+                b = 0.005
             pes.append(a / b)
         return pes
 
@@ -370,7 +372,7 @@ class Tensorflow_model(object):
         sns.regplot(self.valY.flatten(), trials.results[index]["yhat_val"].flatten(),
                     robust=False, fit_reg=False, color="mediumvioletred")
         sns.regplot(self.testY.flatten(), trials.results[index]["yhat_test"].flatten(),
-                    robust=False, fit_reg=False, color="steelblue")
+                    robust=False, fit_reg=True if len(self.testY.flatten()) > 2 else False, color="steelblue")
 
         plt.xlim((0, 1.1))
         plt.ylim((0, 1.1))
@@ -543,8 +545,10 @@ class Tensorflow_model(object):
                         but not the testX/Y.
         '''
         plt.figure(figsize=(5, 5))
-        sns.regplot(trainY.flatten(), updates["yhat_train"].flatten(), robust=False, fit_reg=False, scatter_kws={'alpha': 0.45}, color="salmon")
-        sns.regplot(self.testY.flatten(), updates["yhat_test"].flatten(), robust=False, fit_reg=False, color="steelblue")
+        sns.regplot(trainY.flatten(), updates["yhat_train"].flatten(),
+                    robust=False, fit_reg=False, scatter_kws={'alpha': 0.45}, color="salmon")
+        sns.regplot(self.testY.flatten(), updates["yhat_test"].flatten(),
+                    robust=False, fit_reg=True if len(self.testY.flatten()) > 2 else False, color="steelblue")
         plt.xlim((0, 1.1))
         plt.ylim((0, 1.1))
         plt.plot([[0, 0], [1, 1]], "--")
