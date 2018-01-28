@@ -116,14 +116,17 @@ class Model_preparation(object):
     def get_normalized_train_val_test_dfs(self, df, train_eids, val_eids, test_eids):
 
         train_df = df[train_eids]
-        max_in_train = np.amax(np.array(train_df))
-        train_df_normed = train_df.div(max_in_train)
+        min_in_train = np.amin(np.array(train_df))
+        train_shifted = (train_df - min_in_train)
+        max_in_train = np.amax(np.array(train_shifted))
+        train_df_normed = train_shifted.div(max_in_train)
 
         val_df = df[val_eids]
-        val_df_normed = val_df.div(max_in_train)
+        val_df_normed = (val_df - min_in_train).div(max_in_train)
 
         test_df = df[test_eids]
-        test_df_normed = test_df.div(max_in_train)
+        test_df_normed = (test_df - min_in_train).div(max_in_train)
+
         return train_df_normed, val_df_normed, test_df_normed
 
     '''Normalize and split goi to train and test vectors.'''
@@ -138,10 +141,13 @@ class Model_preparation(object):
         assert np.array_equal(test_eids, test_goi.index.tolist())
 
         '''Now normalize'''
-        max_gex_in_train = max(train_goi)
-        train_goi = train_goi / max_gex_in_train
-        val_goi = val_goi / max_gex_in_train
-        test_goi = test_goi / max_gex_in_train
+        min_gex_in_train = min(train_goi)
+        train_goi_shifted = (train_goi - min_gex_in_train)
+        max_gex_in_train = max(train_goi_shifted)
+
+        train_goi = train_goi_shifted / max_gex_in_train
+        val_goi = (val_goi - min_gex_in_train) / max_gex_in_train
+        test_goi = (test_goi - min_gex_in_train) / max_gex_in_train
 
         return train_goi, val_goi, test_goi
 
