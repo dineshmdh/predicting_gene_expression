@@ -181,7 +181,7 @@ class Tensorflow_model(object):
                 sess.run(train_step, feed_dict={X: self.trainX, Y: self.trainY, pkeep: self.pkeep_train})
                 nn_updates["learning_rate"].append(learning_rate.eval())  # to be used with Adam opt.
 
-                if (i % 10 == 0):
+                if (i % 30 == 0):
                     l, p = sess.run([loss, pcc], feed_dict={X: self.trainX, Y: self.trainY, pkeep: 1})
                     nn_updates["train_loss"].append(l)
                     nn_updates["train_pcc"].append(p[0])
@@ -478,7 +478,7 @@ class Tensorflow_model(object):
                 sess.run(train_step, feed_dict={X: trainX, Y: trainY, pkeep: self.pkeep_train})
                 nn_updates["learning_rate"].append(learning_rate.eval())  # to be used with Adam opt.
 
-                if (i % 5 == 0):
+                if (i % 30 == 0):
                     l, p = sess.run([loss, pcc], feed_dict={X: trainX, Y: trainY, pkeep: 1})
                     nn_updates["train_loss"].append(l)
                     nn_updates["train_pcc"].append(p[0])
