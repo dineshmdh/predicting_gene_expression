@@ -7,9 +7,13 @@ from hyperopt import hp
 LAMDA_LOWER (below) should be > LAMDA_UPPER because of this:
 https://github.com/hyperopt/hyperopt/issues/221
 '''
-LAMDA_BASE = 2  # used to define lamda in parameter space search
-LAMDA_LOWER = 1  # lower limit in 10e-{} space to select lamda
-LAMDA_UPPER = 7
+LAMDA_BASE = 5  # used to define lamda in parameter space search
+LAMDA_LOWER = 3  # lower limit in 10e-{} space to select lamda
+LAMDA_UPPER = 6
+
+LR_BASE = 7
+LR_LOWER = 1  # in the power of 10**-1
+LR_UPPER = 4
 
 
 def uniform_int(name, lower, upper):
@@ -46,6 +50,10 @@ def get_parameter_space_forHPO(trainX):
                 uniform_int('n_units_layer_22', max(2, int(round(0.66 * h1_lower))), max(3, int(round(0.66 * h1_upper)))),  # h2 layer will have 2-3 nodes; doing max(3,_) b/c if for eg. h1_upper = 3, upper limit has to be > lower limit
             ],
         }]),
-        'lamda': LAMDA_BASE * 10**(-1 * uniform_int("lamda", LAMDA_LOWER, LAMDA_UPPER))
+        'lamda': LAMDA_BASE * 10**(-1 * uniform_int("lamda", LAMDA_LOWER, LAMDA_UPPER)),
+        'starter_learning_rate': LR_BASE * 10**(-1 * uniform_int("starter_learning_rate", LR_LOWER, LR_UPPER)),
+        'use_sigmoid_h1': hp.choice('use_sigmoid_h1', [True, False]),
+        'use_sigmoid_h2': hp.choice('use_sigmoid_h2', [True, False]),
+        'use_sigmoid_yhat': hp.choice('use_sigmoid_yhat', [True, False])
     }
     return parameter_space
