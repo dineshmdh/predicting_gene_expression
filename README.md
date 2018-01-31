@@ -23,7 +23,7 @@ To run the program:
 3. Download and unzip the input files from
 [this dropbox link](https://www.dropbox.com/sh/6u9dth28lx6g5as/AACpwMTNjGuctIYN8fA-BOzRa?dl=0 "dropbox link for large files"). (These are the processed Roadmap and CellNet files, and were a bit too large to share on this repo.)
 4. Move these input files in a directory named `Input_files` in the main directory for the package.
-5: Go to the /directory-to-package/Functions/model_scripts, and call the python script below.
+5. Go to the /directory-to-package/Functions/model_scripts, and call the python script below.
 
 ## Usage
 ```python
@@ -36,7 +36,7 @@ usage: main.py [-h] [-d DISTANCE] [-u USE_TAD_INFO]
                gene
 ```
 Examples:
-```
+```python
 python main.py SIX1  # run with default parameters
 python main.py SIX1 -d 200 -Fd 10  # consider top 10 DHS sites in TSS +/- 200kb region that most correlate with the expression of SIX1 across the samples
 python main.py SIX1 -Ft 20 -m 200 -o /output/dir # consider top 6 DHS sites (by default) and top 20 TFs that are predicted to regulate the target gene - SIX1. Run 500 iterations (instead of default, 300) for training the neural net. Send all output to the designated directory.
