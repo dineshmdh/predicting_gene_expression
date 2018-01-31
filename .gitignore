@@ -5,10 +5,13 @@ Functions/notes.py
 Functions/test.ipynb
 Functions/model_scripts/python_*
 Functions/model_scripts/helper_scripts/compute_mutual_information.py
+Functions/model_scripts/get_subplots_to_see_importance_scores.ipynb
 .ipynb_checkpoints
-*/.ipynb_checkpoints/*
+# */.ipynb_checkpoints/*  # looks like the previous line alone suffices
 **/*.pyc
 Output/
 Input_files/
 previous_versions/
 writeup/
+Images/ai/
+
