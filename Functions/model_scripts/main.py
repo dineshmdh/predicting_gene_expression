@@ -17,7 +17,12 @@ import os  # os is being used to set up default outputDir
 import argparse
 import sys
 import hyperopt
+import copy
 import numpy as np
+import collections as col
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 start_time = time.time()
 sys.path = sys.path[1:]
@@ -27,6 +32,8 @@ from global_variables_final_for_git import Global_Vars
 from prep_for_model_for_git import Model_preparation
 from tensorflow_model_for_git import Tensorflow_model
 from HPO_helper import uniform_int, loguniform_int, tpe_method, get_parameter_space_forHPO
+
+plt.switch_backend('agg')
 
 ############################################################
 # ####### Set up the parser arguments ###### #
@@ -120,17 +127,19 @@ start_time = time.time()
 gv = Global_Vars(args, outputDir)  # gene and condition specific outputDir
 mp = Model_preparation(gv)
 
-'''Run HPO on differen train/test splits'''
-for test_idx in range(0, 19):
-    if (test_idx == 4):  # 4 corresponds to val_group of "ENCODE2012"; 2 to brain; 6 to ESC
-        continue
+dict_ims = col.OrderedDict()  # ims = importance score
+for amode in ["joint", "tfs", "dhss"]:
+    for test_idx in range(0, 19):
+        if not (test_idx in [3, 6, 1]):
+            continue
+        if (test_idx == 4):  # 4 = "ENCODE2012"; 2 = brain; 6 = ESC
+            continue
 
-    for amode in ["joint", "tfs", "dhss"]:
         tm = Tensorflow_model(gv, mp, test_eid_group_index=test_idx, mode=amode)
         trials = hyperopt.Trials()
         best_params = hyperopt.fmin(tm.train_tensorflow_nn, trials=trials,
                                     space=get_parameter_space_forHPO(tm.trainX),
-                                    algo=tpe_method, max_evals=15)
+                                    algo=tpe_method, max_evals=5)
 
         index = np.argmin(trials.losses())
         to_log = tm.get_log_into_to_save(index, trials, best_params, mode=amode)
@@ -143,16 +152,53 @@ for test_idx in range(0, 19):
         tm.plot_scatter_performance(amode, index, trials, gv, plot_title=plot_title)
 
         # Now retrain using the validation set
-        wts, layer_sizes, lamda, trainX, trainY, nn_updates, b1, g1, b2, g2 = tm.get_params_from_best_trial(index, trials, best_params)  # nn_updates is the new dict, not the one in tf_model class
-        updates = tm.retrain_tensorflow_nn(wts, layer_sizes, lamda, trainX, trainY, nn_updates, b1, g1, b2, g2)
+        starter_lr, use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat, wts, layer_sizes, lamda, trainX, trainY, b1, g1, b2, g2 = tm.get_params_from_best_trial(index, trials, best_params)  # nn_updates is the new dict, not the one in tf_model class
+        updates = tm.retrain_tensorflow_nn(starter_lr, use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat, wts, layer_sizes, lamda, trainX, trainY, b1, g1, b2, g2)
+
+        # collect the rmses - not properly tested yet ########################################################################################
+        ########################################################################################
+        ########################################################################################
+        '''X_ori = np.concatenate((trainX, tm.valX), axis=0)
+                                Y_ori = np.concatenate((trainY, tm.valY), axis=0)  # this should not be imputed
+                                r_ori = tm.get_rmse(updates, use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat, layer_sizes, lamda, X_=X_ori, Y_ori=Y_ori)
+                                for i in range(0, X_ori.shape[1]):  # for all features
+                                    X_ = copy.deepcopy(X_ori)
+                                    X_[:, i] = 0  # mutate the feat column
+                                    r_ = tm.get_rmse(updates, use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat, layer_sizes, lamda, X_=X_, Y_ori=Y_ori)  # only X is mutated
+                                    if (i in dict_ims.keys()):
+                                        dict_ims[i].append(abs(r_ori - r_))
+                                    else:
+                                        dict_ims[i] = [abs(r_ori - r_)]
+                                    del X_'''
+
         to_log, plot_title = tm.get_log_info_to_save_after_retraining(trainY, updates, title_prefix=title_prefix)  # title prefix only has mode, test group, and testX.shape infos
         logger.info(to_log)
         plot_title = "{};{}".format(gv.gene_ofInterest, plot_title)
         tm.plot_performance_after_retraining(amode, gv, updates, trainY, plot_title=plot_title)
 
+        tm.plot_rmse(gv, updates, mode=amode)
+
         del tm, trials, best_params, index
         del to_log, title_info, title_prefix, title_error_msg, title_suffix, plot_title
-        del wts, layer_sizes, lamda, trainX, trainY, nn_updates, b1, g1, b2, g2
+        del wts, layer_sizes, lamda, trainX, trainY, b1, g1, b2, g2, updates
 
+if (len(dict_ims[0]) >= 3):  # length of the values in the dict correspond the number of tests done
+    pass
+    '''logger.info("Plotting the boxplot for feature importance score")
+
+                # Get the df using the dict, and melt it for boxplot
+                df = pd.DataFrame.from_dict(dict_ims, orient='columns', dtype=None)
+                df_m = pd.melt(df, id_vars=["index"], value_vars=df.columns.tolist())
+                # note: first 2 elements in columns list are "level_0" and index" now
+                df_m.columns = ["index", "Features", "Importance Score"]
+                df_m = df_m[["Feature", "Importance Score"]]
+
+                #Plot the boxplot
+                plt.plot(figsize=(16, 5))
+                sns.set(font_scale=1.5)
+                sns.boxplot(x="Features", y="Importance Score", data=df_m)
+                plt.xticks(rotation=85)
+                plt.tight_layout()
+                plt.savefig(os.path.join(gv.outputDir, "imp_scores_boxplot.pdf"))'''
 
 logger.info("Total time taken: {}".format(time.time() - start_time))
