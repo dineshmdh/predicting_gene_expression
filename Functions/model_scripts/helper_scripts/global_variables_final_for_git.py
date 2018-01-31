@@ -4,6 +4,7 @@ Created on Jan 1, 2018
 __author__ = "Dinesh Manandhar"
 
 '''
+import pdb
 import re
 import os
 import random
@@ -82,7 +83,7 @@ class Global_Vars(object):
         self.use_random_DHSs = args.use_random_DHSs
         self.use_random_TFs = args.use_random_TFs
 
-        self.see_pccs_for_rndFts = args.plot_all  # if True, PCCs for random features are plotted
+        self.plot_all = args.plot_all  # if True, PCCs for random features are plotted
         ####### other variables specific to NN #######
         self.max_iter = args.max_iter
 
@@ -117,6 +118,9 @@ class Global_Vars(object):
         if (self.use_random_TFs):
             self.df_tfs = self.get_random_df_tfs_filtdBy_size(  # log transformation is done before computing pcc
                 df_cnTfs, df_rnase, max_tfs_num=self.df_tfs.shape[0])
+
+        if (self.plot_all):
+            self.plot_input_data()
 
         self.logger.info("Done. Setting up the training and testing split..")
         ################## end of __init__() ######################
@@ -267,7 +271,7 @@ class Global_Vars(object):
         df_random["pcc"] = pccs  # "abs_pcc" field not required since DHSs are not being filtered by pcc
         df_random = df_random.set_index("pcc", append=True)
 
-        if (self.see_pccs_for_rndFts):
+        if (self.plot_all):
             # plotted for a random collection of 1000 DHS sites
             rand_ints_ = sorted(random.sample(range(0, df_dhss.shape[0]), 1000))
             df_ = df_dhss.iloc[rand_ints_, :]
@@ -306,7 +310,7 @@ class Global_Vars(object):
         rand_ints = sorted(random.sample(range(0, df_random.shape[0]), max_tfs_num))
         df_random = df_random.iloc[rand_ints, :]
 
-        if (self.see_pccs_for_rndFts):
+        if (self.plot_all):
             sns.kdeplot(np.array(pccs), color="red", label="PCCs for all TFs")
             sns.rugplot(np.array(df_random["pcc"].tolist()), label="PCCs for randomly selected TFs")
             plt.xlabel("PCCs")
@@ -317,3 +321,15 @@ class Global_Vars(object):
         df_random = df_random.drop(["abs_pcc"], axis=1)
         df_random = df_random.set_index("pcc", append=True)
         return df_random
+
+    def plot_input_data(self):
+        plt.figure(figsize=(17, 21))
+        plt.subplot(1, 3, 1)
+        sns.heatmap(self.df_dhss.transpose(), yticklabels=True)
+        plt.subplot(1, 3, 2)
+        sns.heatmap(self.df_tfs.transpose(), yticklabels=False)
+        plt.subplot(1, 3, 3)
+        sns.heatmap(self.goi.to_frame(), yticklabels=False)
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.outputDir, "input_feats_and_goi.pdf"))
+        plt.close()
