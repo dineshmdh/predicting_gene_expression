@@ -11,6 +11,7 @@ Functions/model_scripts/get_subplots_to_see_importance_scores.ipynb
 **/*.pyc
 Output/
 Input_files/
+!/Input_files/roadmap_EID_info.txt
 previous_versions/
 writeup/
 Images/ai/
