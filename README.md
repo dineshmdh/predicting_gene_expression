@@ -1,6 +1,6 @@
-## Cross cell-type prediction of gene expression
+## Cross cell-type Prediction of Gene EXpression (CPGex)
 
-This program uses cross cell/tissue-type cis-TSS chromatin accessibility and known TF-TG (i.e. transcription factor to target gene) interactions for a given gene of interest to predict its expression in a new [or given] cell line of interest (not used in training).
+This program uses cross cell/tissue-type cis-TSS chromatin accessibility and known TF-TG (i.e. transcription factor to target gene) interactions for a given gene of interest to predict its expression in a held-out cell line of interest. Currently, this program has been tested for Roadmap Epigenomics Data, that has 127 matching cell/tissue-samples. (Training and testing on ENCODE samples is in progress.)
 
 Please see the [wiki page](https://github.com/dineshmdh/predicting_gene_expression/wiki/Cross-cell-type-prediction-of-gene-expression-WIKI) for details on the modeling framework, comparison against state-of-the-art and some current drawbacks.
 
