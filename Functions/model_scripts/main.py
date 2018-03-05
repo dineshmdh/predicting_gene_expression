@@ -101,7 +101,7 @@ def get_output_dir(args):
 
 
 # create output dir, set the logging handlers (file + stream) and params
-outputDir = get_output_dir(args)  # creates a specific directory in args.outputDir
+outputDir = args.outputDir  # get_output_dir(args)  # creates a specific directory in args.outputDir
 formatter = logging.Formatter('%(asctime)s: %(name)-12s: %(levelname)-8s: %(message)s')
 
 file_handler = logging.FileHandler(os.path.join(outputDir, args.gene.upper() + ".log"))
@@ -132,9 +132,23 @@ def write_rmses(adict_ims):
     handleIn = open(os.path.join(gv.outputDir, "feat_importance_scores.txt"), "aw")
     for k, v in adict_ims.items():
         for av in v:  # for each rmse value corresponding to the feature
-            handleIn.write("{}:{}".format(k, av))
+            handleIn.write("{}:{}\n".format(k, av))
     handleIn.close()
 
+
+def do_fc_perturbations_for_fts(test_group, feats_to_perturb, max_fold, updates,
+                                use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat, layer_sizes, lamda, tm):
+    perturb_infos = []
+    for feat_perturbed in feats_to_perturb:
+        for fold_increase in range(1, max_fold):  # from 1x to 5x
+            X_ = copy.deepcopy(tm.valX)
+            X_[:, feat_perturbed] *= fold_increase
+            yval_hat = tm.get_yhat(updates, use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat, layer_sizes, lamda, X_=X_, Y_ori=tm.valY)
+            toWrite_info = zip(tm.val_goi.index.tolist(), tm.valY.flatten(), yval_hat[0].flatten())
+            for aitem in toWrite_info:
+                toWrite = "{}\t{}\t{}\t{}\t{}\t{}\n".format(feat_perturbed, fold_increase, test_group, aitem[0], aitem[1], aitem[2])
+                perturb_infos.append(toWrite)
+    return perturb_infos
 ############################################################
 ############################################################
 
@@ -184,7 +198,17 @@ for amode in ["joint"]:  # , "tfs", "dhss"]:
             else:
                 dict_ims[i] = [abs(r_ori - r_)]
             del X_
+
         write_rmses(dict_ims)
+        # do perturbation experiments
+        feats_to_perturb = [6, 7]  # , 8, 11, 12]
+        max_fold = 5
+        perturb_infos = do_fc_perturbations_for_fts(test_idx, feats_to_perturb, max_fold, updates,
+                                                    use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat, layer_sizes, lamda)  # doing fc increase, testing on encode12 for all test groups
+        handleIn = open(os.path.join(gv.outputDir, "feat_perturbation_expts.txt"), "aw")
+        for aline in perturb_infos:
+            handleIn.write(aline)
+        handleIn.close()
 
         to_log, plot_title = tm.get_log_info_to_save_after_retraining(trainY, updates, title_prefix=title_prefix)  # title prefix only has mode, test group, and testX.shape infos
         logger.info(to_log)
@@ -197,8 +221,6 @@ for amode in ["joint"]:  # , "tfs", "dhss"]:
         del to_log, title_info, title_prefix, title_error_msg, title_suffix, plot_title
         del wts, layer_sizes, lamda, trainX, trainY, b1, g1, b2, g2, updates
 
-if (len(dict_ims[0]) >= 3):  # length of the values in the dict correspond the number of tests done
-    pass
     '''logger.info("Plotting the boxplot for feature importance score")
 
                 # Get the df using the dict, and melt it for boxplot
