@@ -10,6 +10,7 @@ Functions/model_scripts/get_subplots_to_see_importance_scores.ipynb
 # */.ipynb_checkpoints/*  # looks like the previous line alone suffices
 **/*.pyc
 Output/
+Output_new/
 Input_files/
 !/Input_files/roadmap_EID_info.txt
 !/Input_files/.gitkeep
