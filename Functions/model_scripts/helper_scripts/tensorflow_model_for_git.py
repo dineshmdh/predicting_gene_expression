@@ -205,7 +205,7 @@ class Tensorflow_model(object):
             nn_updates["loss_val"].append(l)
             nn_updates["pcc_val"].append(p[0])
 
-            nn_updates["loss"] = nn_updates["rmse_val"]  # loss_val[-1]  # previously, 1-pcc_val or loss_val
+            nn_updates["loss"] = nn_updates["rmse_val"]  # 1 - nn_updates["pcc_val"][-1]    # loss_val[-1]  # previously, 1-pcc_val or loss_val
             if (np.any(np.isnan(nn_updates["loss"]))):
                 nn_updates["loss"] = np.inf  # https://github.com/hyperopt/hyperopt/pull/176
                 nn_updates["status"] = STATUS_FAIL
@@ -690,6 +690,38 @@ class Tensorflow_model(object):
             sess.run(init)
             r = sess.run([rmse], feed_dict={X: X_, Y: Y_ori, pkeep: 1})
         return r[0]  # just returning the rmse
+
+    def get_yhat(self, updates, use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat,
+                 layer_sizes, lamda, X_, Y_ori):
+        # X_ can be original or imputed X. Y is always fixed to Y_ori.
+
+        # ------ Variables and placeholders ------
+        pkeep = tf.placeholder(tf.float32, name="pkeep")
+        X = tf.placeholder(tf.float32, shape=[None, updates["W1"].shape[0]], name="X")
+        Y = tf.placeholder(tf.float32, [None, 1], name="Y")  # true Ys
+
+        W1 = tf.Variable(tf.cast(updates["W1"], tf.float32), name="W1")
+        b1 = tf.Variable(tf.cast(updates["b1"], tf.float32), name="H1_bn_offset")  # bn == batch normalization
+        g1 = tf.Variable(tf.cast(updates["g1"], tf.float32), name="H1_bn_scale")
+        W2 = tf.Variable(tf.cast(updates["W2"], tf.float32), name="W2")
+
+        if not (updates["W3"] is None):
+            W3 = tf.Variable(tf.cast(updates["W3"], tf.float32), name="W3")
+            b2 = tf.Variable(tf.cast(updates["b2"], tf.float32), name="H2_bn_offset")
+            g2 = tf.Variable(tf.cast(updates["g2"], tf.float32), name="H2_bn_scale")
+        else:
+            W3 = None
+            b2 = None
+            g2 = None
+
+        Yhat, rmse, loss = self.tf_model(X, Y, W1, W2, W3, b1, g1, b2, g2, pkeep, lamda,
+                                         use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat)
+
+        with tf.Session() as sess:
+            init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
+            sess.run(init)
+            y = sess.run([Yhat], feed_dict={X: X_, Y: Y_ori, pkeep: 1})
+        return y  # just returning the yhat
 
 
 if __name__ == "__main__":
