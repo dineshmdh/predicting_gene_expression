@@ -62,6 +62,7 @@ parser.add_argument("-m", "--max_iter", help="Maximum number of interations for 
 parser.add_argument("-o", "--outputDir", help="Output directory. A directory for this gene of interest and set of parameters used is created at this location. (Default is '../Output')", type=str, default=os.path.join(os.getcwd(), "../../Output"))
 parser.add_argument("-k", "--run_id", help="Run_id for multiple parallel runs. This is useful in slurm. (Default: -1)", type=int, default=-1)
 parser.add_argument("-p", "--plot_all", help="If set, all supplemental plots are also generated in addition to the scatterplots showing the performances after hyperparameter optimization and re-training (i.e. training the full training and validation set using the optimized hyperparameters). (Default: Not set)", action="store_true")
+parser.add_argument("-tg", "--test_group_index", help="Test group to use. Should be one of 0-18 for Roadmaps data. (Default: 0)", type=int, default=0)
 
 args = parser.parse_args()
 
@@ -122,16 +123,31 @@ logger.info("Command line arguments: {}".format(args))
 ############################################################
 # ####### Set up the data for the model ###### #
 ############################################################
+
+def write_rmses(adict_ims):
+    '''Write the RMSEs (importance scores) corresponding to feature mutations in a file.
+    Arguments:
+    - adict_ims is the importance score dict, with a list of rmses for each feature index keys.
+    '''
+    handleIn = open(os.path.join(gv.outputDir, "feat_importance_scores.txt"), "aw")
+    for k, v in adict_ims.items():
+        for av in v:  # for each rmse value corresponding to the feature
+            handleIn.write("{}:{}".format(k, av))
+    handleIn.close()
+
+############################################################
+############################################################
+
+
 start_time = time.time()
 
 gv = Global_Vars(args, outputDir)  # gene and condition specific outputDir
 mp = Model_preparation(gv)
 
 dict_ims = col.OrderedDict()  # ims = importance score
-for amode in ["joint", "tfs", "dhss"]:
-    for test_idx in range(0, 19):
-        if not (test_idx in [3, 6, 1]):
-            continue
+for amode in ["joint"]:  # , "tfs", "dhss"]:
+    for test_idx in range(args.test_group_index, args.test_group_index + 1):
+        # if not (test_idx in [3, 6, 1]): continue
         if (test_idx == 4):  # 4 = "ENCODE2012"; 2 = brain; 6 = ESC
             continue
 
@@ -155,21 +171,20 @@ for amode in ["joint", "tfs", "dhss"]:
         starter_lr, use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat, wts, layer_sizes, lamda, trainX, trainY, b1, g1, b2, g2 = tm.get_params_from_best_trial(index, trials, best_params)  # nn_updates is the new dict, not the one in tf_model class
         updates = tm.retrain_tensorflow_nn(starter_lr, use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat, wts, layer_sizes, lamda, trainX, trainY, b1, g1, b2, g2)
 
-        # collect the rmses - not properly tested yet ########################################################################################
-        ########################################################################################
-        ########################################################################################
-        '''X_ori = np.concatenate((trainX, tm.valX), axis=0)
-                                Y_ori = np.concatenate((trainY, tm.valY), axis=0)  # this should not be imputed
-                                r_ori = tm.get_rmse(updates, use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat, layer_sizes, lamda, X_=X_ori, Y_ori=Y_ori)
-                                for i in range(0, X_ori.shape[1]):  # for all features
-                                    X_ = copy.deepcopy(X_ori)
-                                    X_[:, i] = 0  # mutate the feat column
-                                    r_ = tm.get_rmse(updates, use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat, layer_sizes, lamda, X_=X_, Y_ori=Y_ori)  # only X is mutated
-                                    if (i in dict_ims.keys()):
-                                        dict_ims[i].append(abs(r_ori - r_))
-                                    else:
-                                        dict_ims[i] = [abs(r_ori - r_)]
-                                    del X_'''
+        # collect the rmses
+        X_ori = np.concatenate((trainX, tm.valX), axis=0)
+        Y_ori = np.concatenate((trainY, tm.valY), axis=0)  # this should not be imputed
+        r_ori = tm.get_rmse(updates, use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat, layer_sizes, lamda, X_=X_ori, Y_ori=Y_ori)
+        for i in range(0, X_ori.shape[1]):  # for all features
+            X_ = copy.deepcopy(X_ori)
+            X_[:, i] = 0  # mutate the feat column
+            r_ = tm.get_rmse(updates, use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat, layer_sizes, lamda, X_=X_, Y_ori=Y_ori)  # only X is mutated
+            if (i in dict_ims.keys()):
+                dict_ims[i].append(abs(r_ori - r_))
+            else:
+                dict_ims[i] = [abs(r_ori - r_)]
+            del X_
+        write_rmses(dict_ims)
 
         to_log, plot_title = tm.get_log_info_to_save_after_retraining(trainY, updates, title_prefix=title_prefix)  # title prefix only has mode, test group, and testX.shape infos
         logger.info(to_log)
