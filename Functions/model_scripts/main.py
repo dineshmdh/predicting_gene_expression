@@ -204,7 +204,7 @@ for amode in ["joint"]:  # , "tfs", "dhss"]:
         feats_to_perturb = [6, 7]  # , 8, 11, 12]
         max_fold = 5
         perturb_infos = do_fc_perturbations_for_fts(test_idx, feats_to_perturb, max_fold, updates,
-                                                    use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat, layer_sizes, lamda)  # doing fc increase, testing on encode12 for all test groups
+                                                    use_sigmoid_h1, use_sigmoid_h2, use_sigmoid_yhat, layer_sizes, lamda, tm)  # doing fc increase, testing on encode12 for all test groups
         handleIn = open(os.path.join(gv.outputDir, "feat_perturbation_expts.txt"), "aw")
         for aline in perturb_infos:
             handleIn.write(aline)
