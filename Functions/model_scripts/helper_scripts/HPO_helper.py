@@ -13,7 +13,7 @@ LAMDA_UPPER = 6
 
 LR_BASE = 7
 LR_LOWER = 1  # in the power of 10**-1
-LR_UPPER = 4
+LR_UPPER = 3
 
 
 def uniform_int(name, lower, upper):
