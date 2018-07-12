@@ -116,18 +116,18 @@ class Model_preparation(object):
     def get_normalized_train_val_test_dfs(self, df, train_eids, val_eids, test_eids):
 
         train_df = df[train_eids]
+        val_df = df[val_eids]
+        test_df = df[test_eids]
+
         min_in_train = np.amin(np.array(train_df))
         train_shifted = (train_df - min_in_train)
         max_in_train = np.amax(np.array(train_shifted))
+
         train_df_normed = train_shifted.div(max_in_train)
-
-        val_df = df[val_eids]
         val_df_normed = (val_df - min_in_train).div(max_in_train)
-
-        test_df = df[test_eids]
         test_df_normed = (test_df - min_in_train).div(max_in_train)
 
-        return train_df_normed, val_df_normed, test_df_normed
+        return train_df_normed, val_df_normed, test_df_normed, max_in_train, min_in_train
 
     '''Normalize and split goi to train and test vectors.'''
 
@@ -136,6 +136,7 @@ class Model_preparation(object):
         train_goi = gv.goi[gv.goi.index.isin(train_eids)]
         val_goi = gv.goi[gv.goi.index.isin(val_eids)]
         test_goi = gv.goi[gv.goi.index.isin(test_eids)]
+
         assert np.array_equal(train_eids, train_goi.index.tolist())  # check the order of samples
         assert np.array_equal(val_eids, val_goi.index.tolist())
         assert np.array_equal(test_eids, test_goi.index.tolist())
