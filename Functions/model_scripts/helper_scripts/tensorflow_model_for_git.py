@@ -87,8 +87,8 @@ class Tensorflow_model(object):
         '''Get train and test X matrices (like train_dhss) for the models.
         Note these X matrices (like train_dhss) have fts as rows and samples as cols.
         These will be transposed to get train/test/X/Y matrices later.'''
-        self.train_dhss, self.val_dhss, self.test_dhss = mp.get_normalized_train_val_test_dfs(gv.df_dhss, self.train_eids, self.val_eids, self.test_eids)
-        self.train_tfs, self.val_tfs, self.test_tfs = mp.get_normalized_train_val_test_dfs(gv.df_tfs, self.train_eids, self.val_eids, self.test_eids)
+        self.train_dhss, self.val_dhss, self.test_dhss, self.max_train_dhss, self.min_train_dhss = mp.get_normalized_train_val_test_dfs(gv.df_dhss, self.train_eids, self.val_eids, self.test_eids)
+        self.train_tfs, self.val_tfs, self.test_tfs, self.max_train_tfs, self.min_train_tfs = mp.get_normalized_train_val_test_dfs(gv.df_tfs, self.train_eids, self.val_eids, self.test_eids)
         self.train_joint = mp.merge_dhs_and_tf_dfs(self.train_dhss, self.train_tfs, gv)  # for dhs+tf joint model
         self.val_joint = mp.merge_dhs_and_tf_dfs(self.val_dhss, self.val_tfs, gv)
         self.test_joint = mp.merge_dhs_and_tf_dfs(self.test_dhss, self.test_tfs, gv)
